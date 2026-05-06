@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: DurableFlow
+    folder: DurableFlow
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards
+
