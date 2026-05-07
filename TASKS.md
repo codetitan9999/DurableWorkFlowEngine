@@ -1,6 +1,37 @@
 # DurableFlow Learning Roadmap
 
+This file is the implementation backlog for the project.
+
+I keep it for two reasons:
+
+- to keep the project honest about what is still unfinished
+- to make the roadmap visible instead of leaving the next steps vague
+
 The phases below are ordered from easiest to hardest and focus on backend and systems-design learning. Each phase is meaningful on its own and builds on the seams already present in this starter.
+
+## Status summary
+
+Completed foundation:
+
+- local multi-service development stack
+- schema and migrations
+- API and worker skeletons
+- outbox-based happy path
+- sample handler processing
+- dashboard-based manual validation
+- starter metrics and tracing bootstrap
+
+Still to build:
+
+- definition-driven workflow expansion
+- retries and backoff
+- delayed scheduling
+- DLQ behavior
+- crash recovery
+- stronger idempotency
+- workflow versioning
+
+The phases below describe that remaining work in the order I plan to tackle it.
 
 ## Phase 1: Replace hardcoded task creation with definition parsing
 
@@ -338,4 +369,3 @@ AI can accelerate authoring and debugging, but only after the core system is det
 ### Optional hints
 
 - Start with read-only assistance before generation that mutates definitions
-

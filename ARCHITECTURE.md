@@ -1,10 +1,44 @@
 # DurableFlow Architecture
 
+This document describes the current system shape, why the components are split the way they are, and which parts are intentionally still unfinished.
+
+Because this is a personal learning project, I optimized the architecture for:
+
+- durability-first thinking
+- readability
+- explicit extension points
+- gradual feature growth
+
+It is intentionally not over-abstracted.
+
 ## Goal
 
 Build a durable workflow engine where workflow state survives crashes, dispatch can be retried safely, and operational behavior is inspectable.
 
 This first pass is intentionally small, but the structure is chosen so the later features can fit naturally.
+
+## Current maturity
+
+What exists today:
+
+- a runnable API service
+- a runnable worker service
+- a minimal dashboard
+- a Postgres-backed workflow state model
+- Redis Streams dispatch
+- an outbox-based happy path
+- a verified sample task execution flow
+
+What does not exist yet:
+
+- definition-driven graph execution
+- retry orchestration
+- delayed scheduling
+- DLQ routing
+- strong crash recovery
+- workflow versioning
+
+That distinction matters because the project is being built in stages, and the architecture is designed to support that growth cleanly.
 
 ## Core principles
 
@@ -177,6 +211,17 @@ sequenceDiagram
     Worker->>Redis: XACK
 ```
 
+## Current implementation boundaries
+
+The current vertical slice is intentionally narrower than the final design:
+
+- one workflow execution creates one hardcoded sample task
+- one task produces one outbox event
+- one outbox event becomes one Redis dispatch
+- the sample handler is used to validate the durability path, not business complexity
+
+This is enough to prove the architecture seams without prematurely implementing every workflow-engine feature at once.
+
 ## Why the outbox matters here
 
 Without an outbox, the API could write task state to Postgres and then crash before publishing to Redis, leaving work stranded. With an outbox row, the dispatch intent is durable even if the publish step happens later.
@@ -194,6 +239,19 @@ That means:
 - Handlers should be safe to run more than once
 
 The sample handler is intentionally simple, but the system shape assumes idempotency from the start.
+
+## Why I structured it this way
+
+Each major concern already has a clear home:
+
+- HTTP and request decoding live in `internal/httpapi`
+- orchestration logic lives in `internal/orchestrator`
+- database writes and reads live in `internal/db`
+- async transport details live in `internal/queue`
+- durable dispatch bridging lives in `internal/outbox`
+- task business logic lives in `internal/handlers`
+
+That separation keeps the code approachable while still resembling a real service architecture. It also lets me extend one subsystem at a time without turning every new feature into a full-codebase refactor.
 
 ## Known intentional gaps
 
@@ -258,6 +316,25 @@ Primary seam:
 
 - `task_attempts`
 - Redis consumer-group pending entries
+
+Future direction:
+
+- inspect Redis pending entries
+- reclaim abandoned deliveries carefully
+- reconcile Redis delivery state against authoritative Postgres task state
+
+## Project evolution strategy
+
+The intended build order is:
+
+1. prove a minimal durable happy path
+2. replace hardcoded task creation with definition-driven behavior
+3. make reads and debugging better
+4. add retries and delayed scheduling
+5. harden failure handling and recovery
+6. only then add more advanced product features
+
+That ordering is intentional. In workflow systems, I think getting the state model right early matters more than adding lots of features quickly.
 - `task_instances.status`
 
 Future direction:
@@ -277,4 +354,3 @@ Future direction:
 
 - Persist deduplication markers per side effect
 - Make external integrations safe under duplicate delivery
-
