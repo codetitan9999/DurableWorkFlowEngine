@@ -7,7 +7,7 @@ I keep it for two reasons:
 - to keep the project honest about what is still unfinished
 - to make the roadmap visible instead of leaving the next steps vague
 
-The phases below are ordered from easiest to hardest and focus on backend and systems-design learning. Each phase is meaningful on its own and builds on the seams already present in this starter.
+The phases below are ordered from easiest to hardest. Each one builds on the current codebase and pushes the project a little closer to a real workflow engine.
 
 ## Status summary
 
@@ -35,7 +35,7 @@ The phases below describe that remaining work in the order I plan to tackle it.
 
 ## Phase 1: Replace hardcoded task creation with definition parsing
 
-### What you should build
+### Build
 
 Read the stored workflow definition and create task instances from it instead of always creating one hardcoded sample task.
 
@@ -43,14 +43,14 @@ Read the stored workflow definition and create task instances from it instead of
 
 This is the first real step from “demo pipeline” to “workflow engine.” It teaches you how orchestration logic should depend on durable definitions rather than ad hoc code paths.
 
-### What concepts you should learn first
+### Learn first
 
 - JSON schema design
 - Graph modeling basics
 - Validation of user-defined configs
 - Transaction boundaries in orchestrators
 
-### Which files/modules you should touch
+### Files to touch
 
 - [internal/orchestrator/service.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/service.go)
 - [internal/db/store.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/db/store.go)
@@ -70,21 +70,21 @@ This is the first real step from “demo pipeline” to “workflow engine.” I
 
 ## Phase 2: Add execution-read APIs that expose attempts and timelines
 
-### What you should build
+### Build
 
 Expand the read side so the API can return task attempts, timestamps, and failure details for an execution.
 
 ### Why it matters
 
-Good engines are debuggable. This phase teaches you how observability starts with your data model and read APIs, not just metrics dashboards.
+Good engines are debuggable. This phase is where observability starts to show up in the data model and read APIs, not just in metrics dashboards.
 
-### What concepts you should learn first
+### Learn first
 
 - Read models
 - API response shaping
 - Query performance and indexing
 
-### Which files/modules you should touch
+### Files to touch
 
 - [internal/db/store.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/db/store.go)
 - [internal/httpapi/router.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/httpapi/router.go)
@@ -103,7 +103,7 @@ Good engines are debuggable. This phase teaches you how observability starts wit
 
 ## Phase 3: Implement retry policy with backoff
 
-### What you should build
+### Build
 
 Add retry-aware failure handling so task failures create another attempt later instead of always failing terminally.
 
@@ -111,14 +111,14 @@ Add retry-aware failure handling so task failures create another attempt later i
 
 Retries are where workflow engines become operationally useful, and where state-modeling mistakes become visible quickly.
 
-### What concepts you should learn first
+### Learn first
 
 - Exponential backoff
 - Retry budgets and max attempts
 - Failure classification
 - Idempotency requirements under retries
 
-### Which files/modules you should touch
+### Files to touch
 
 - [internal/orchestrator/worker.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/worker.go)
 - [internal/db/store.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/db/store.go)
@@ -139,7 +139,7 @@ Retries are where workflow engines become operationally useful, and where state-
 
 ## Phase 4: Build a delayed-task scheduler
 
-### What you should build
+### Build
 
 Create a scheduler loop that scans Postgres for tasks whose `next_run_at` has arrived and writes dispatch events into the outbox.
 
@@ -147,14 +147,14 @@ Create a scheduler loop that scans Postgres for tasks whose `next_run_at` has ar
 
 This phase forces you to think like a durable system: time-based state changes should be data-driven and restart-safe.
 
-### What concepts you should learn first
+### Learn first
 
 - Polling schedulers
 - Leases and concurrency control
 - “Ready queue” patterns
 - Time-based orchestration
 
-### Which files/modules you should touch
+### Files to touch
 
 - [internal/outbox](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/outbox)
 - [internal/db/store.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/db/store.go)
@@ -173,7 +173,7 @@ This phase forces you to think like a durable system: time-based state changes s
 
 ## Phase 5: Add dead-letter queue behavior
 
-### What you should build
+### Build
 
 Introduce terminal routing for tasks that exceed retry policy or fail with non-retriable errors.
 
@@ -181,13 +181,13 @@ Introduce terminal routing for tasks that exceed retry policy or fail with non-r
 
 DLQs are part of making failure modes explicit and operable instead of invisible.
 
-### What concepts you should learn first
+### Learn first
 
 - Terminal vs transient failures
 - Failure triage workflows
 - Operational replay patterns
 
-### Which files/modules you should touch
+### Files to touch
 
 - [internal/db/store.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/db/store.go)
 - [internal/orchestrator/worker.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/worker.go)
@@ -202,11 +202,11 @@ DLQs are part of making failure modes explicit and operable instead of invisible
 ### Optional hints
 
 - You do not need a second Redis stream yet
-- A Postgres-backed DLQ view or table is a good starting point
+- A Postgres-backed DLQ view or table is a clean first version
 
 ## Phase 6: Harden consumer crash recovery
 
-### What you should build
+### Build
 
 Handle worker crashes and pending Redis consumer-group entries by reconciling Redis delivery state with Postgres task state.
 
@@ -214,14 +214,14 @@ Handle worker crashes and pending Redis consumer-group entries by reconciling Re
 
 This is where durable systems become real. It teaches the difference between “queued,” “in progress,” and “durably recoverable.”
 
-### What concepts you should learn first
+### Learn first
 
 - Redis Streams pending entries
 - Consumer groups and message claiming
 - Heartbeats and leases
 - Recovery reconciliation
 
-### Which files/modules you should touch
+### Files to touch
 
 - [internal/queue/redis_streams.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/queue/redis_streams.go)
 - [internal/orchestrator/worker.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/worker.go)
@@ -240,7 +240,7 @@ This is where durable systems become real. It teaches the difference between “
 
 ## Phase 7: Strengthen idempotency guarantees
 
-### What you should build
+### Build
 
 Move from “best effort task-level idempotency” to explicit side-effect idempotency boundaries.
 
@@ -248,14 +248,14 @@ Move from “best effort task-level idempotency” to explicit side-effect idemp
 
 At-least-once delivery only works in practice when side effects are safe under duplication.
 
-### What concepts you should learn first
+### Learn first
 
 - Idempotency keys
 - Deduplication stores
 - External API write semantics
 - Exactly-once myths
 
-### Which files/modules you should touch
+### Files to touch
 
 - [internal/handlers](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/handlers)
 - [internal/domain/models.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/domain/models.go)
@@ -274,7 +274,7 @@ At-least-once delivery only works in practice when side effects are safe under d
 
 ## Phase 8: Add workflow versioning
 
-### What you should build
+### Build
 
 Allow multiple versions of a workflow definition and ensure executions bind to a specific version immutably.
 
@@ -282,13 +282,13 @@ Allow multiple versions of a workflow definition and ensure executions bind to a
 
 Workflow systems need stable historical behavior. Versioning teaches immutability, migration, and compatibility tradeoffs.
 
-### What concepts you should learn first
+### Learn first
 
 - Immutable definitions
 - Compatibility and rollout strategies
 - Metadata vs behavior versioning
 
-### Which files/modules you should touch
+### Files to touch
 
 - [internal/db/store.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/db/store.go)
 - [internal/orchestrator/service.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/service.go)
@@ -306,7 +306,7 @@ Workflow systems need stable historical behavior. Versioning teaches immutabilit
 
 ## Phase 9: Improve observability for operations and debugging
 
-### What you should build
+### Build
 
 Expand metrics, traces, and dashboard panels to show queue lag, attempt counts, retry outcomes, and failure rates.
 
@@ -314,14 +314,14 @@ Expand metrics, traces, and dashboard panels to show queue lag, attempt counts, 
 
 You cannot operate workflow infrastructure blindly. This phase helps you connect internal state transitions to operational signals.
 
-### What concepts you should learn first
+### Learn first
 
 - RED metrics
 - Queue lag and throughput
 - Trace spans across async boundaries
 - Useful dashboards vs noisy dashboards
 
-### Which files/modules you should touch
+### Files to touch
 
 - [internal/telemetry/telemetry.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/telemetry/telemetry.go)
 - [deployments/observability](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/deployments/observability)
@@ -340,7 +340,7 @@ You cannot operate workflow infrastructure blindly. This phase helps you connect
 
 ## Phase 10: Add an AI assist layer last
 
-### What you should build
+### Build
 
 After the engine is operationally trustworthy, add AI helpers for workflow generation and failure summarization.
 
@@ -348,13 +348,13 @@ After the engine is operationally trustworthy, add AI helpers for workflow gener
 
 AI can accelerate authoring and debugging, but only after the core system is deterministic and observable.
 
-### What concepts you should learn first
+### Learn first
 
 - Structured generation
 - Guardrails for user-defined automation
 - Failure summarization from traces and DB state
 
-### Which files/modules you should touch
+### Files to touch
 
 - [apps/api](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/apps/api)
 - [apps/web](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/apps/web)

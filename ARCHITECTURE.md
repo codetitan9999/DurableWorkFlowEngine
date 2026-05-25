@@ -80,7 +80,7 @@ Responsibilities:
 - Trigger an execution
 - Poll the current execution snapshot
 
-This is deliberately not a full dashboard yet.
+The web app is still just a thin validation UI, not a real dashboard yet.
 
 ### `internal/db`
 
@@ -220,13 +220,13 @@ The current vertical slice is intentionally narrower than the final design:
 - one outbox event becomes one Redis dispatch
 - the sample handler is used to validate the durability path, not business complexity
 
-This is enough to prove the architecture seams without prematurely implementing every workflow-engine feature at once.
+For now, this is enough to prove the main architecture seams without trying to build every workflow-engine feature at once.
 
 ## Why the outbox matters here
 
 Without an outbox, the API could write task state to Postgres and then crash before publishing to Redis, leaving work stranded. With an outbox row, the dispatch intent is durable even if the publish step happens later.
 
-This starter does not implement a fully hardened outbox processor yet, but it already gives you the right persistence seam for that work.
+The outbox processor is not hardened yet, but the persistence seam is already there.
 
 ## Why at-least-once changes the design
 

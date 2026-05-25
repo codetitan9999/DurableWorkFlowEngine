@@ -1,6 +1,6 @@
 # Happy Path Validation Notes
 
-The current starter validates one intentionally thin path:
+Right now the project validates one intentionally thin path:
 
 1. Create a workflow definition
 2. Trigger an execution
@@ -11,7 +11,7 @@ The current starter validates one intentionally thin path:
 7. Run the `sample.echo` handler
 8. Persist task and execution success
 
-Useful places to inspect while learning:
+Useful places to inspect:
 
 - API bootstrapping: [apps/api/main.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/apps/api/main.go)
 - Worker bootstrapping: [apps/worker/main.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/apps/worker/main.go)
@@ -19,4 +19,3 @@ Useful places to inspect while learning:
 - Outbox publishing: [internal/outbox/publisher.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/outbox/publisher.go)
 - Task consumption: [internal/queue/redis_streams.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/queue/redis_streams.go)
 - Task processing: [internal/orchestrator/worker.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/worker.go)
-

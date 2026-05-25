@@ -21,7 +21,7 @@ What works today:
 - Basic schema, orchestration, outbox dispatch, and worker processing in place
 - Many production-shaping features still intentionally pending
 
-The repo is meant to reflect the current state of the build clearly, with the foundation in place and the next phases mapped out.
+I want the repo to reflect the current state of the build clearly, with the foundation in place and the next phases mapped out.
 
 ## Why this exists
 
@@ -125,7 +125,7 @@ docs/           supplementary notes
 
 ## How to read this repository
 
-If you want to understand the codebase quickly, this is the reading order I would recommend:
+When I come back to the codebase, this is the reading order I use:
 
 1. Read this file for project intent and current scope
 2. Read [ARCHITECTURE.md](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/ARCHITECTURE.md) for system responsibilities and data flow
@@ -152,7 +152,7 @@ The current vertical slice does exactly this:
 8. Run a mock handler
 9. Persist task success and execution success back into Postgres
 
-The current implementation deliberately expands every execution into one hardcoded sample task. That seam is where you will later implement definition-driven graph expansion.
+Right now, each execution creates one hardcoded sample task. It keeps the first pass simple and makes the execution flow easy to inspect before I add definition-driven task creation.
 
 ## Current snapshot
 
@@ -165,7 +165,7 @@ As of the current version:
 - `1` fully verified end-to-end happy path
 - `~0.9s` observed local trigger-to-completion latency in one verified run
 
-I am leaving these numbers here mainly to make the current scope explicit.
+I keep these numbers here mainly to make the current scope explicit.
 
 ## Prerequisites
 
@@ -242,7 +242,7 @@ Fetch execution state:
 curl http://localhost:8080/api/executions/<execution-id>
 ```
 
-## Key design decisions in this starter
+## Current design choices
 
 - Postgres owns workflow state, task state, attempts, and dispatch intent.
 - Redis Streams is not authoritative; it only carries dispatch messages.
@@ -264,7 +264,7 @@ The next major milestones are:
 
 Those are tracked in more detail in [TASKS.md](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/TASKS.md).
 
-The goal with DurableFlow is not to make it look finished quickly. The goal is to build enough of it carefully that the later features rest on something solid.
+I am treating DurableFlow as a long-term build, with the early work focused on getting the core execution model and system boundaries right.
 
 ## Next docs
 
