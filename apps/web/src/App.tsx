@@ -17,6 +17,20 @@ type TaskInstance = {
   last_error?: string;
 };
 
+type TaskAttempt = {
+  id: string;
+  attempt_number: number;
+  status: string;
+  started_at: string;
+  finished_at?: string;
+  error?: string;
+};
+
+type TaskSnapshot = {
+  task: TaskInstance;
+  attempts: TaskAttempt[];
+};
+
 type ExecutionSnapshot = {
   execution: {
     id: string;
@@ -25,7 +39,7 @@ type ExecutionSnapshot = {
     output?: unknown;
     error?: string;
   };
-  tasks: TaskInstance[];
+  tasks: TaskSnapshot[];
 };
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
@@ -45,6 +59,29 @@ const defaultExecutionInput = `{
   "order_id": "demo-order-456"
 }`;
 
+function formatTimestamp(value?: string) {
+  if (!value) {
+    return "Not finished yet";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString();
+}
+
+function tryParseJSON(value: string): { value?: unknown; error?: string } {
+  try {
+    return { value: JSON.parse(value) };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Invalid JSON"
+    };
+  }
+}
+
 export default function App() {
   const [workflowName, setWorkflowName] = useState("demo-order-approval");
   const [workflowDescription, setWorkflowDescription] = useState(
@@ -58,6 +95,20 @@ export default function App() {
   const [responseText, setResponseText] = useState("");
   const [errorText, setErrorText] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
+  const trimmedWorkflowName = workflowName.trim();
+  const workflowNameError = trimmedWorkflowName ? "" : "Workflow name is required.";
+  const definitionParseResult = tryParseJSON(definitionText);
+  const inputParseResult = tryParseJSON(inputText);
+  const definitionError = definitionParseResult.error
+    ? `Definition JSON is invalid: ${definitionParseResult.error}`
+    : "";
+  const inputError = inputParseResult.error
+    ? `Execution input JSON is invalid: ${inputParseResult.error}`
+    : "";
+  const createWorkflowDisabled =
+    loading !== null || workflowNameError !== "" || definitionError !== "";
+  const triggerExecutionDisabled =
+    loading !== null || workflow === null || inputError !== "";
 
   useEffect(() => {
     if (!executionId) {
@@ -95,6 +146,16 @@ export default function App() {
   }, [executionId]);
 
   async function createWorkflow() {
+    if (workflowNameError) {
+      setErrorText(workflowNameError);
+      return;
+    }
+
+    if (definitionParseResult.error) {
+      setErrorText(definitionError);
+      return;
+    }
+
     setLoading("create-workflow");
     setErrorText("");
 
@@ -103,9 +164,9 @@ export default function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: workflowName,
+          name: trimmedWorkflowName,
           description: workflowDescription,
-          definition: JSON.parse(definitionText)
+          definition: definitionParseResult.value
         })
       });
 
@@ -129,6 +190,11 @@ export default function App() {
       return;
     }
 
+    if (inputParseResult.error) {
+      setErrorText(inputError);
+      return;
+    }
+
     setLoading("trigger-execution");
     setErrorText("");
 
@@ -138,7 +204,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workflow_definition_id: workflow.id,
-          input: JSON.parse(inputText)
+          input: inputParseResult.value
         })
       });
 
@@ -188,6 +254,7 @@ export default function App() {
             Name
             <input value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} />
           </label>
+          {workflowNameError ? <p className="validation-text">{workflowNameError}</p> : null}
           <label>
             Description
             <input
@@ -203,7 +270,8 @@ export default function App() {
               rows={10}
             />
           </label>
-          <button onClick={() => void createWorkflow()} disabled={loading !== null}>
+          {definitionError ? <p className="validation-text">{definitionError}</p> : null}
+          <button onClick={() => void createWorkflow()} disabled={createWorkflowDisabled}>
             {loading === "create-workflow" ? "Creating..." : "Create Workflow"}
           </button>
         </section>
@@ -222,9 +290,10 @@ export default function App() {
               rows={8}
             />
           </label>
+          {inputError ? <p className="validation-text">{inputError}</p> : null}
           <button
             onClick={() => void triggerExecution()}
-            disabled={loading !== null || workflow === null}
+            disabled={triggerExecutionDisabled}
           >
             {loading === "trigger-execution" ? "Triggering..." : "Trigger Execution"}
           </button>
@@ -246,16 +315,44 @@ export default function App() {
               </div>
               <code>{snapshot.execution.id}</code>
               <div className="task-list">
-                {snapshot.tasks.map((task) => (
-                  <div className="task-card" key={task.id}>
+                {snapshot.tasks.map((taskSnapshot) => {
+                  const attempts = taskSnapshot.attempts ?? [];
+
+                  return (
+                    <div className="task-card" key={taskSnapshot.task.id}>
                     <div className="snapshot-header">
-                      <span>{task.task_name}</span>
-                      <strong>{task.status}</strong>
+                      <span>{taskSnapshot.task.task_name}</span>
+                      <strong>{taskSnapshot.task.status}</strong>
                     </div>
-                    <code>{task.handler_key}</code>
-                    <p>Attempts: {task.attempts_total}</p>
-                  </div>
-                ))}
+                    <code>{taskSnapshot.task.handler_key}</code>
+                    <p>Attempts: {taskSnapshot.task.attempts_total}</p>
+                    {taskSnapshot.task.last_error ? (
+                      <div className="attempt-error">{taskSnapshot.task.last_error}</div>
+                    ) : null}
+                    {attempts.length > 0 && (
+                      <div className="attempt-list">
+                        {attempts.map((attempt) => (
+                          <div className="attempt-card" key={attempt.id}>
+                            <div className="snapshot-header">
+                              <span>Attempt {attempt.attempt_number}</span>
+                              <strong>{attempt.status}</strong>
+                            </div>
+                            <p className="attempt-meta">
+                              Started: {formatTimestamp(attempt.started_at)}
+                            </p>
+                            <p className="attempt-meta">
+                              Finished: {formatTimestamp(attempt.finished_at)}
+                            </p>
+                            {attempt.error ? (
+                              <div className="attempt-error">{attempt.error}</div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : (
@@ -272,4 +369,3 @@ export default function App() {
     </div>
   );
 }
-

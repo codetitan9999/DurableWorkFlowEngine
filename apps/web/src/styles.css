@@ -149,6 +149,39 @@ code {
   padding: 1rem;
 }
 
+.attempt-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.attempt-card {
+  border: 1px solid rgba(20, 33, 61, 0.09);
+  border-radius: 1rem;
+  background: rgba(20, 33, 61, 0.03);
+  padding: 0.8rem 0.9rem;
+}
+
+.attempt-meta {
+  margin: 0.2rem 0 0;
+  color: rgba(20, 33, 61, 0.74);
+  font-size: 0.95rem;
+}
+
+.attempt-error {
+  margin-top: 0.65rem;
+  border-radius: 0.8rem;
+  background: rgba(183, 28, 28, 0.08);
+  color: #8c1c13;
+  padding: 0.65rem 0.8rem;
+  font-size: 0.95rem;
+}
+
+.validation-text {
+  margin: -0.25rem 0 0;
+  color: #8c1c13;
+  font-size: 0.95rem;
+}
+
 .snapshot-header {
   display: flex;
   align-items: center;

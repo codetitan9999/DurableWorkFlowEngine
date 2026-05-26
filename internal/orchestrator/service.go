@@ -51,11 +51,23 @@ func (s *Service) CreateWorkflowDefinition(ctx context.Context, req CreateWorkfl
       "handler_key": "sample.echo"
     }
   ]
-}`)
+	}`)
+	}
+
+	if _, err := ParseAndValidateWorkflowDefinition(definition); err != nil {
+		return domain.WorkflowDefinition{}, err
 	}
 
 	s.logger.InfoContext(ctx, "creating workflow definition", "name", name)
-	return s.store.CreateWorkflowDefinition(ctx, name, req.Description, definition)
+	item, err := s.store.CreateWorkflowDefinition(ctx, name, req.Description, definition)
+	if err != nil {
+		if db.IsUniqueViolation(err) {
+			return domain.WorkflowDefinition{}, errors.New("workflow name already exists")
+		}
+		return domain.WorkflowDefinition{}, fmt.Errorf("create workflow definition: %w", err)
+	}
+
+	return item, nil
 }
 
 func (s *Service) TriggerExecution(ctx context.Context, req TriggerExecutionRequest) (domain.ExecutionStartResult, error) {
@@ -71,12 +83,12 @@ func (s *Service) TriggerExecution(ctx context.Context, req TriggerExecutionRequ
 		return domain.ExecutionStartResult{}, fmt.Errorf("get workflow definition: %w", err)
 	}
 
-	workflowSpec, err := parseAndValidateWorkflowDefinition(workflowDefinition.DefinitionJSON)
+	workflowSpec, err := ParseAndValidateWorkflowDefinition(workflowDefinition.DefinitionJSON)
 	if err != nil {
 		return domain.ExecutionStartResult{}, err
 	}
 
-	entryTask, err := findEntryTask(workflowSpec)
+	entryTask, err := FindEntryTask(workflowSpec)
 	if err != nil {
 		return domain.ExecutionStartResult{}, err
 	}
@@ -95,7 +107,7 @@ func (s *Service) GetExecutionSnapshot(ctx context.Context, executionID string) 
 	return s.store.GetExecutionSnapshot(ctx, executionID)
 }
 
-func parseAndValidateWorkflowDefinition(raw json.RawMessage) (domain.WorkflowDefinitionSpec, error) {
+func ParseAndValidateWorkflowDefinition(raw json.RawMessage) (domain.WorkflowDefinitionSpec, error) {
 	var workflowSpec domain.WorkflowDefinitionSpec
 	if err := json.Unmarshal(raw, &workflowSpec); err != nil {
 		return domain.WorkflowDefinitionSpec{}, fmt.Errorf("unmarshal workflow definition: %w", err)
@@ -118,6 +130,12 @@ func parseAndValidateWorkflowDefinition(raw json.RawMessage) (domain.WorkflowDef
 		if strings.TrimSpace(task.Name) == strings.TrimSpace(workflowSpec.EntryTask) {
 			entryTaskFound = true
 		}
+		if task.MaxAttempts < 0 {
+			return domain.WorkflowDefinitionSpec{}, errors.New("workflow definition tasks must have max_attempts of at least 0")
+		}
+		if task.BackoffSeconds < 0 {
+			return domain.WorkflowDefinitionSpec{}, errors.New("workflow definition tasks must have backoff_seconds of at least 0")
+		}
 	}
 	if !entryTaskFound {
 		return domain.WorkflowDefinitionSpec{}, errors.New("entry_task must be one of the tasks defined in the workflow definition")
@@ -126,7 +144,7 @@ func parseAndValidateWorkflowDefinition(raw json.RawMessage) (domain.WorkflowDef
 	return workflowSpec, nil
 }
 
-func findEntryTask(workflowSpec domain.WorkflowDefinitionSpec) (domain.WorkflowTaskSpec, error) {
+func FindEntryTask(workflowSpec domain.WorkflowDefinitionSpec) (domain.WorkflowTaskSpec, error) {
 	entryTaskName := strings.TrimSpace(workflowSpec.EntryTask)
 	for _, task := range workflowSpec.Tasks {
 		if strings.TrimSpace(task.Name) == entryTaskName {
@@ -135,4 +153,14 @@ func findEntryTask(workflowSpec domain.WorkflowDefinitionSpec) (domain.WorkflowT
 	}
 
 	return domain.WorkflowTaskSpec{}, errors.New("entry_task must be one of the tasks defined in the workflow definition")
+}
+
+func FindTaskSpecByName(workflowSpec domain.WorkflowDefinitionSpec, taskName string) (domain.WorkflowTaskSpec, error) {
+	for _, task := range workflowSpec.Tasks {
+		if strings.TrimSpace(task.Name) == strings.TrimSpace(taskName) {
+			return task, nil
+		}
+	}
+
+	return domain.WorkflowTaskSpec{}, errors.New("task not found in workflow definition: " + taskName)
 }

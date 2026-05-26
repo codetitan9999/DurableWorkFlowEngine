@@ -31,6 +31,8 @@ Example WorkflowDefinition.DefinitionJSON:
     {
       "name": "sample-task",
       "handler_key": "sample.echo"
+	  "max_attempts": 3,
+	  "backoff_seconds": 60
     }
   ]
 }
@@ -43,8 +45,10 @@ type WorkflowDefinitionSpec struct {
 }
 
 type WorkflowTaskSpec struct {
-	Name       string `json:"name"`
-	HandlerKey string `json:"handler_key"`
+	Name           string `json:"name"`
+	HandlerKey     string `json:"handler_key"`
+	MaxAttempts    int    `json:"max_attempts"`
+	BackoffSeconds int    `json:"backoff_seconds"`
 }
 
 type WorkflowDefinition struct {
@@ -127,5 +131,10 @@ type ExecutionStartResult struct {
 
 type ExecutionSnapshot struct {
 	Execution WorkflowExecution `json:"execution"`
-	Tasks     []TaskInstance    `json:"tasks"`
+	Tasks     []TaskSnapshot    `json:"tasks"`
+}
+
+type TaskSnapshot struct {
+	Task     TaskInstance  `json:"task"`
+	Attempts []TaskAttempt `json:"attempts"`
 }

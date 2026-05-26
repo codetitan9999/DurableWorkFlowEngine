@@ -51,6 +51,14 @@ func (p *Publisher) Run(ctx context.Context) error {
 }
 
 func (p *Publisher) publishOnce(ctx context.Context) error {
+	retryCount, err := p.store.EnqueueDueTaskRetries(ctx, 20)
+	if err != nil {
+		return err
+	}
+	if retryCount > 0 {
+		p.logger.InfoContext(ctx, "enqueued due task retries", "count", retryCount)
+	}
+
 	events, err := p.store.ListPendingOutbox(ctx, 20)
 	if err != nil {
 		return err
@@ -85,4 +93,3 @@ func (p *Publisher) publishOnce(ctx context.Context) error {
 
 	return nil
 }
-

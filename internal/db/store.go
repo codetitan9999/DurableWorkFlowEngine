@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"durableflow/internal/domain"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -48,6 +50,26 @@ func (s *Store) GetWorkflowDefinition(ctx context.Context, id string) (domain.Wo
 	return scanWorkflowDefinition(row)
 }
 
+func (s *Store) GetWorkflowExecution(ctx context.Context, id string) (domain.WorkflowExecution, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, workflow_definition_id, status, input_json, output_json, error_text, created_at, updated_at, started_at, completed_at
+		FROM workflow_executions
+		WHERE id = $1
+	`, id)
+
+	return scanWorkflowExecution(row)
+}
+
+func (s *Store) GetTaskInstance(ctx context.Context, id string) (domain.TaskInstance, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, workflow_execution_id, task_name, handler_key, status, input_json, output_json, next_run_at, last_error_text, attempts_total, idempotency_key, dispatched_at, completed_at, created_at, updated_at
+		FROM task_instances
+		WHERE id = $1
+	`, id)
+
+	return scanTaskInstance(row)
+}
+
 func (s *Store) CreateExecutionAndTask(ctx context.Context, workflowDefinitionID string, input json.RawMessage, taskName string, handlerKey string) (domain.ExecutionStartResult, error) {
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -73,7 +95,6 @@ func (s *Store) CreateExecutionAndTask(ctx context.Context, workflowDefinitionID
 		return domain.ExecutionStartResult{}, err
 	}
 
-	// TODO: Replace the hardcoded sample task with definition-driven task graph creation.
 	taskRow := tx.QueryRow(ctx, `
 		INSERT INTO task_instances (
 			workflow_execution_id,
@@ -162,9 +183,47 @@ func (s *Store) GetExecutionSnapshot(ctx context.Context, executionID string) (d
 		return domain.ExecutionSnapshot{}, err
 	}
 
+	attemptRows, err := s.pool.Query(ctx, `
+		SELECT a.id, a.task_instance_id, a.attempt_number, a.status, a.started_at, a.finished_at, a.error_text, a.output_json, a.created_at
+		FROM task_attempts a
+		JOIN task_instances t ON t.id = a.task_instance_id
+		WHERE t.workflow_execution_id = $1
+		ORDER BY a.task_instance_id, a.attempt_number
+	`, executionID)
+	if err != nil {
+		return domain.ExecutionSnapshot{}, err
+	}
+	defer attemptRows.Close()
+
+	attemptsByTask := make(map[string][]domain.TaskAttempt, len(tasks))
+	for attemptRows.Next() {
+		attempt, err := scanTaskAttempt(attemptRows)
+		if err != nil {
+			return domain.ExecutionSnapshot{}, err
+		}
+		attemptsByTask[attempt.TaskInstanceID] = append(attemptsByTask[attempt.TaskInstanceID], attempt)
+	}
+
+	if err := attemptRows.Err(); err != nil {
+		return domain.ExecutionSnapshot{}, err
+	}
+
+	taskSnapshots := make([]domain.TaskSnapshot, 0, len(tasks))
+	for _, task := range tasks {
+		attempts := attemptsByTask[task.ID]
+		if attempts == nil {
+			attempts = []domain.TaskAttempt{}
+		}
+
+		taskSnapshots = append(taskSnapshots, domain.TaskSnapshot{
+			Task:     task,
+			Attempts: attempts,
+		})
+	}
+
 	return domain.ExecutionSnapshot{
 		Execution: execution,
-		Tasks:     tasks,
+		Tasks:     taskSnapshots,
 	}, nil
 }
 
@@ -213,6 +272,7 @@ func (s *Store) StartTaskAttempt(ctx context.Context, taskID string) (domain.Tas
 		UPDATE task_instances
 		SET status = $2,
 			attempts_total = $3,
+			next_run_at = NULL,
 			updated_at = NOW()
 		WHERE id = $1
 		RETURNING id, workflow_execution_id, task_name, handler_key, status, input_json, output_json, next_run_at, last_error_text, attempts_total, idempotency_key, dispatched_at, completed_at, created_at, updated_at
@@ -272,6 +332,113 @@ func (s *Store) CompleteTaskAttempt(ctx context.Context, taskID, attemptID strin
 			updated_at = NOW()
 		WHERE id = $1
 	`, executionID, domain.ExecutionStatusSucceeded, payload); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+func (s *Store) EnqueueDueTaskRetries(ctx context.Context, limit int) (int, error) {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+
+	rows, err := tx.Query(ctx, `
+		SELECT id, workflow_execution_id, handler_key
+		FROM task_instances
+		WHERE status = $1
+			AND next_run_at IS NOT NULL
+			AND next_run_at <= NOW()
+		ORDER BY next_run_at
+		LIMIT $2
+		FOR UPDATE SKIP LOCKED
+	`, domain.TaskStatusPending, limit)
+
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for rows.Next() {
+		var taskID string
+		var executionID string
+		var handlerKey string
+		if err := rows.Scan(&taskID, &executionID, &handlerKey); err != nil {
+			rows.Close()
+			return count, err
+		}
+		count++
+
+		payload, err := json.Marshal(domain.DispatchTaskPayload{
+			TaskID:      taskID,
+			ExecutionID: executionID, // Not needed for dispatching the task, worker will look up execution ID by task ID
+			HandlerKey:  handlerKey,  // Not needed for dispatching the task, worker will look up handler key by task ID
+		})
+		if err != nil {
+			rows.Close()
+			return count, err
+		}
+
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO outbox_events (
+				aggregate_type,
+				aggregate_id,
+				event_type,
+				payload_json,
+				available_at
+			)
+			VALUES ($1, $2, $3, $4, NOW())
+		`, "task_instance", taskID, "task.dispatch", payload); err != nil {
+			rows.Close()
+			return count, err
+		}
+
+		if _, err := tx.Exec(ctx, `
+			UPDATE task_instances
+			SET next_run_at = NULL,
+				updated_at = NOW()
+			WHERE id = $1
+		`, taskID); err != nil {
+			rows.Close()
+			return count, err
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return count, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return count, err
+	}
+	return count, nil
+}
+func (s *Store) ScheduleTaskRetry(ctx context.Context, taskID, attemptID, errorText string, nextRunAt time.Time) error {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE task_attempts
+		SET status = $2,
+			finished_at = NOW(),
+			error_text = $3
+		WHERE id = $1
+	`, attemptID, domain.TaskAttemptStatusFailed, truncate(errorText, 1000)); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE task_instances
+		SET status = $2,
+			last_error_text = $3,
+			next_run_at = $4,
+			updated_at = NOW()
+		WHERE id = $1
+	`, taskID, domain.TaskStatusPending, truncate(errorText, 1000), nextRunAt.UTC()); err != nil {
 		return err
 	}
 
@@ -506,4 +673,9 @@ func scanOutboxEvent(row rowScanner) (domain.OutboxEvent, error) {
 
 func IsNotFound(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows)
+}
+
+func IsUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
