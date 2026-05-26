@@ -38,7 +38,17 @@ func (s *Store) CreateWorkflowDefinition(ctx context.Context, name, description 
 	return scanWorkflowDefinition(row)
 }
 
-func (s *Store) CreateExecutionAndTask(ctx context.Context, workflowDefinitionID string, input json.RawMessage) (domain.ExecutionStartResult, error) {
+func (s *Store) GetWorkflowDefinition(ctx context.Context, id string) (domain.WorkflowDefinition, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, name, description, version, status, definition_json, created_at, updated_at
+		FROM workflow_definitions
+		WHERE id = $1
+	`, id)
+
+	return scanWorkflowDefinition(row)
+}
+
+func (s *Store) CreateExecutionAndTask(ctx context.Context, workflowDefinitionID string, input json.RawMessage, taskName string, handlerKey string) (domain.ExecutionStartResult, error) {
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return domain.ExecutionStartResult{}, err
@@ -77,7 +87,7 @@ func (s *Store) CreateExecutionAndTask(ctx context.Context, workflowDefinitionID
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
 		RETURNING id, workflow_execution_id, task_name, handler_key, status, input_json, output_json, next_run_at, last_error_text, attempts_total, idempotency_key, dispatched_at, completed_at, created_at, updated_at
-	`, execution.ID, "sample-task", "sample.echo", domain.TaskStatusPending, normalizeJSON(input), fmt.Sprintf("%s:%s", execution.ID, "sample.echo"))
+	`, execution.ID, taskName, handlerKey, domain.TaskStatusPending, normalizeJSON(input), fmt.Sprintf("%s:%s", execution.ID, handlerKey))
 
 	task, err := scanTaskInstance(taskRow)
 	if err != nil {

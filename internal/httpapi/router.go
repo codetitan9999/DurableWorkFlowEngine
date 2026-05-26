@@ -95,6 +95,12 @@ func (rt *Router) handleExecutions(w http.ResponseWriter, r *http.Request) {
 		Input:                req.Input,
 	})
 	if err != nil {
+		if db.IsNotFound(err) {
+			rt.logger.Error("trigger execution failed", "error", err)
+			writeJSON(w, http.StatusNotFound, map[string]any{"error": "workflow definition not found"})
+			return
+		}
+
 		rt.logger.Error("trigger execution failed", "error", err)
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
