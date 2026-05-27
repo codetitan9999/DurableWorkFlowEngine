@@ -25,10 +25,10 @@ Completed foundation:
 - retry policy, backoff scheduling, and outbox-based retry redispatch
 - linear task chaining through `next_task`
 - Postgres-backed dead-lettered task listing and replay
+- Redis consumer-group reclaim for stale pending deliveries
 
 Still to build:
 
-- crash recovery
 - stronger idempotency
 - richer graph execution beyond linear `next_task`
 - workflow versioning
@@ -218,6 +218,8 @@ DLQs are part of making failure modes explicit and operable instead of invisible
 - A Postgres-backed DLQ view or table is a clean first version
 
 ## Phase 6: Harden consumer crash recovery
+
+Status: completed
 
 ### Build
 

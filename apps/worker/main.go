@@ -87,7 +87,11 @@ func main() {
 
 	go func() {
 		logger.Info("worker consuming stream", "stream", cfg.RedisStream, "group", cfg.RedisGroup)
-		if err := streams.Consume(ctx, cfg.RedisConsumer, worker.HandleDispatchedTask); err != nil && !errors.Is(err, context.Canceled) {
+		if err := streams.Consume(ctx, queue.ConsumeOptions{
+			Consumer:       cfg.RedisConsumer,
+			ReclaimMinIdle: cfg.RedisReclaimMinIdle,
+			ReclaimCount:   cfg.RedisReclaimCount,
+		}, worker.HandleDispatchedTask); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("stream consumer exited", "error", err)
 			stop()
 		}

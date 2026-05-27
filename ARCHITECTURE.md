@@ -31,11 +31,11 @@ What exists today:
 - linear task chaining through `next_task`
 - a verified multi-step sample execution flow
 - a Postgres-backed dead-lettered task flow with list and replay support
+- Redis consumer-group recovery for stale pending deliveries
 
 What does not exist yet:
 
 - a separate DLQ transport or richer operator tooling around replay
-- strong crash recovery
 - workflow versioning
 - branching or parallel workflow execution
 
@@ -116,6 +116,7 @@ Responsibilities:
 - Hide Redis Streams-specific concerns behind a small adapter
 - Create the consumer group if needed
 - Publish and consume task messages
+- Reclaim stale pending consumer-group deliveries before reading fresh work
 
 ### `internal/handlers`
 
@@ -265,7 +266,6 @@ That separation keeps the code approachable while still resembling a real servic
 These are not missing by accident. They are the next learning steps.
 
 - Workflow definitions are not yet expanded into real task graphs
-- Pending consumer-group messages are not reclaimed after worker crashes
 - Workflow versioning is not implemented
 - Cancellation is not implemented
 - Handler-level idempotency is only lightly modeled today

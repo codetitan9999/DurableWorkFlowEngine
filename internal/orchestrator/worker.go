@@ -2,24 +2,35 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
 
-	"durableflow/internal/db"
 	"durableflow/internal/domain"
 	"durableflow/internal/handlers"
 	"durableflow/internal/queue"
 	"durableflow/internal/telemetry"
 )
 
+type workerStore interface {
+	GetTaskInstance(ctx context.Context, id string) (domain.TaskInstance, error)
+	GetWorkflowExecution(ctx context.Context, id string) (domain.WorkflowExecution, error)
+	GetWorkflowDefinition(ctx context.Context, id string) (domain.WorkflowDefinition, error)
+	StartTaskAttempt(ctx context.Context, taskID string) (domain.TaskInstance, domain.TaskAttempt, bool, error)
+	ScheduleTaskRetry(ctx context.Context, taskID, attemptID, errorText string, nextRunAt time.Time) error
+	FailTaskAttempt(ctx context.Context, taskID, attemptID, errorText string) error
+	CompleteTaskAttempt(ctx context.Context, taskID, attemptID string, output json.RawMessage) error
+	CompleteTaskAttemptAndEnqueueNextTask(ctx context.Context, taskID, attemptID, nextTaskName, nextHandlerKey string, output json.RawMessage) error
+}
+
 type Worker struct {
-	store    *db.Store
+	store    workerStore
 	registry *handlers.Registry
 	logger   *slog.Logger
 }
 
-func NewWorker(store *db.Store, registry *handlers.Registry, logger *slog.Logger) *Worker {
+func NewWorker(store workerStore, registry *handlers.Registry, logger *slog.Logger) *Worker {
 	return &Worker{
 		store:    store,
 		registry: registry,

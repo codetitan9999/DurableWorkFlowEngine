@@ -18,6 +18,14 @@ type TaskMessage struct {
 	HandlerKey  string `json:"handler_key"`
 }
 
+type ConsumeOptions struct {
+	Consumer       string
+	ReclaimMinIdle time.Duration
+	ReclaimCount   int64
+	ReadCount      int64
+	Block          time.Duration
+}
+
 type RedisStreams struct {
 	client *redis.Client
 	stream string
@@ -91,7 +99,9 @@ func (r *RedisStreams) DispatchTask(ctx context.Context, message TaskMessage) er
 	}).Err()
 }
 
-func (r *RedisStreams) Consume(ctx context.Context, consumer string, handle func(context.Context, TaskMessage) error) error {
+func (r *RedisStreams) Consume(ctx context.Context, opts ConsumeOptions, handle func(context.Context, TaskMessage) error) error {
+	opts = normalizeConsumeOptions(opts)
+
 	if err := r.EnsureGroup(ctx); err != nil {
 		return err
 	}
@@ -103,12 +113,24 @@ func (r *RedisStreams) Consume(ctx context.Context, consumer string, handle func
 		default:
 		}
 
+		reclaimed, err := r.claimPending(ctx, opts)
+		if err != nil {
+			return err
+		}
+		if len(reclaimed) > 0 {
+			r.logger.Info("reclaimed pending stream messages", "stream", r.stream, "group", r.group, "consumer", opts.Consumer, "count", len(reclaimed))
+			if err := r.processMessages(ctx, opts.Consumer, reclaimed, handle); err != nil {
+				return err
+			}
+			continue
+		}
+
 		streams, err := r.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    r.group,
-			Consumer: consumer,
+			Consumer: opts.Consumer,
 			Streams:  []string{r.stream, ">"},
-			Count:    1,
-			Block:    5 * time.Second,
+			Count:    opts.ReadCount,
+			Block:    opts.Block,
 		}).Result()
 		if err != nil {
 			if errors.Is(err, redis.Nil) {
@@ -118,31 +140,79 @@ func (r *RedisStreams) Consume(ctx context.Context, consumer string, handle func
 		}
 
 		for _, stream := range streams {
-			for _, message := range stream.Messages {
-				payloadValue, ok := message.Values["payload"]
-				if !ok {
-					return fmt.Errorf("stream message %s missing payload", message.ID)
-				}
-
-				payloadText, ok := payloadValue.(string)
-				if !ok {
-					payloadText = fmt.Sprint(payloadValue)
-				}
-
-				var task TaskMessage
-				if err := json.Unmarshal([]byte(payloadText), &task); err != nil {
-					return fmt.Errorf("decode stream message %s: %w", message.ID, err)
-				}
-
-				if err := handle(ctx, task); err != nil {
-					r.logger.Error("task processing failed", "task_id", task.TaskID, "stream_message_id", message.ID, "error", err)
-					continue
-				}
-
-				if err := r.client.XAck(ctx, r.stream, r.group, message.ID).Err(); err != nil {
-					return err
-				}
+			if err := r.processMessages(ctx, opts.Consumer, stream.Messages, handle); err != nil {
+				return err
 			}
 		}
 	}
+}
+
+func normalizeConsumeOptions(opts ConsumeOptions) ConsumeOptions {
+	if opts.ReclaimMinIdle <= 0 {
+		opts.ReclaimMinIdle = 30 * time.Second
+	}
+	if opts.ReclaimCount <= 0 {
+		opts.ReclaimCount = 10
+	}
+	if opts.ReadCount <= 0 {
+		opts.ReadCount = 1
+	}
+	if opts.Block <= 0 {
+		opts.Block = 5 * time.Second
+	}
+	return opts
+}
+
+func (r *RedisStreams) claimPending(ctx context.Context, opts ConsumeOptions) ([]redis.XMessage, error) {
+	messages, _, err := r.client.XAutoClaim(ctx, &redis.XAutoClaimArgs{
+		Stream:   r.stream,
+		Group:    r.group,
+		Consumer: opts.Consumer,
+		MinIdle:  opts.ReclaimMinIdle,
+		Start:    "0-0",
+		Count:    opts.ReclaimCount,
+	}).Result()
+	if err != nil && !errors.Is(err, redis.Nil) {
+		return nil, err
+	}
+	return messages, nil
+}
+
+func (r *RedisStreams) processMessages(ctx context.Context, consumer string, messages []redis.XMessage, handle func(context.Context, TaskMessage) error) error {
+	for _, message := range messages {
+		task, err := decodeTaskMessage(message)
+		if err != nil {
+			return err
+		}
+
+		if err := handle(ctx, task); err != nil {
+			r.logger.Error("task processing failed", "task_id", task.TaskID, "stream_message_id", message.ID, "consumer", consumer, "error", err)
+			continue
+		}
+
+		if err := r.client.XAck(ctx, r.stream, r.group, message.ID).Err(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func decodeTaskMessage(message redis.XMessage) (TaskMessage, error) {
+	payloadValue, ok := message.Values["payload"]
+	if !ok {
+		return TaskMessage{}, fmt.Errorf("stream message %s missing payload", message.ID)
+	}
+
+	payloadText, ok := payloadValue.(string)
+	if !ok {
+		payloadText = fmt.Sprint(payloadValue)
+	}
+
+	var task TaskMessage
+	if err := json.Unmarshal([]byte(payloadText), &task); err != nil {
+		return TaskMessage{}, fmt.Errorf("decode stream message %s: %w", message.ID, err)
+	}
+
+	return task, nil
 }

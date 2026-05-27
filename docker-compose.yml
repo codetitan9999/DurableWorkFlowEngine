@@ -55,6 +55,8 @@ services:
       REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
       REDIS_STREAM: ${REDIS_STREAM:-durableflow.tasks}
       REDIS_GROUP: ${REDIS_GROUP:-durableflow-workers}
+      REDIS_RECLAIM_MIN_IDLE: ${REDIS_RECLAIM_MIN_IDLE:-30s}
+      REDIS_RECLAIM_COUNT: ${REDIS_RECLAIM_COUNT:-10}
       OUTBOX_POLL_INTERVAL: ${OUTBOX_POLL_INTERVAL:-2s}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
     depends_on:
@@ -75,6 +77,8 @@ services:
       REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
       REDIS_STREAM: ${REDIS_STREAM:-durableflow.tasks}
       REDIS_GROUP: ${REDIS_GROUP:-durableflow-workers}
+      REDIS_RECLAIM_MIN_IDLE: ${REDIS_RECLAIM_MIN_IDLE:-30s}
+      REDIS_RECLAIM_COUNT: ${REDIS_RECLAIM_COUNT:-10}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
     depends_on:
       - postgres
@@ -97,4 +101,3 @@ services:
 volumes:
   postgres-data:
   grafana-data:
-

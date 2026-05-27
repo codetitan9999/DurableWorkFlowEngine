@@ -22,6 +22,7 @@ What works today:
 - Linear multi-step workflow chaining with one task able to enqueue the next task
 - Execution snapshots that expose task attempts, retry state, and progression through the workflow
 - Postgres-backed dead-lettered task handling with list and replay support
+- Redis consumer-group recovery that reclaims stale pending deliveries before reading new work
 
 I want the repo to reflect the current state of the build clearly, with the foundation in place and the next phases mapped out.
 
@@ -79,14 +80,13 @@ Today, the repo proves that this flow works:
 
 That is enough to validate the shape of the system.
 
-What it does not prove yet is the full workflow-engine problem space: richer graph execution, stronger crash recovery, and harder idempotency boundaries under broader concurrency patterns.
+What it does not prove yet is the full workflow-engine problem space: richer graph execution and harder idempotency boundaries under broader concurrency patterns.
 
 ## What is intentionally not implemented yet
 
 - Separate DLQ transport or richer admin tooling beyond the current Postgres-backed dead-letter flow
 - Cancellation and timeouts
 - Workflow versioning
-- Recovery of stuck/pending Redis consumer-group messages
 - Richer graph execution beyond linear `next_task`
 - Advanced dashboard features
 - AI workflow generation and failure summarization
@@ -157,6 +157,7 @@ The current vertical slice does exactly this:
 9. Retry later on failure by storing `next_run_at` and re-enqueueing through the outbox
 10. On success, enqueue the next task in a linear workflow if `next_task` is configured
 11. Persist execution success only after the terminal task completes
+12. Reclaim stale pending Redis consumer-group messages after a worker crash and re-run them safely through the same worker path
 
 ## Current snapshot
 
