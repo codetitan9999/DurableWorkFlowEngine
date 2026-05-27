@@ -1,374 +1,461 @@
 # DurableFlow Architecture
 
-This document describes the current system shape, why the components are split the way they are, and which parts are intentionally still unfinished.
+This document explains how DurableFlow works today, why the components are split the way they are, and which tradeoffs were made deliberately.
 
-Because this is a personal learning project, I optimized the architecture for:
+The system is intentionally small enough to understand in one sitting, but the problems it tackles are real:
 
-- durability-first thinking
-- readability
-- explicit extension points
-- gradual feature growth
+- durable workflow state
+- asynchronous task dispatch
+- retries with persisted scheduling
+- duplicate delivery under at-least-once semantics
+- dead-letter handling and replay
+- crash recovery for abandoned queue deliveries
+- handler-level idempotency
 
-It is intentionally not over-abstracted.
+## System goal
 
-## Goal
+DurableFlow aims to be a workflow engine where:
 
-Build a durable workflow engine where workflow state survives crashes, dispatch can be retried safely, and operational behavior is inspectable.
+- workflow truth survives crashes
+- async delivery can be retried without corrupting state
+- operators can explain what happened from durable records
+- handlers can survive duplicate delivery without duplicating side effects
 
-This first pass is intentionally small, but the structure is chosen so the later features can fit naturally.
+That goal is more important than raw feature count. The architecture favors correctness seams over feature breadth.
 
-## Current maturity
+## Core invariants
 
-What exists today:
+There are four invariants that shape almost every design decision.
 
-- a runnable API service
-- a runnable worker service
-- a minimal dashboard
-- a Postgres-backed workflow state model
-- Redis Streams dispatch
-- an outbox-based dispatch path for both first-run tasks and retries
-- retry scheduling backed by `next_run_at`
-- linear task chaining through `next_task`
-- a verified multi-step sample execution flow
-- a Postgres-backed dead-lettered task flow with list and replay support
-- Redis consumer-group recovery for stale pending deliveries
-- handler-level idempotency persisted in Postgres for the sample and notification handlers
-- task-owned idempotency reservations so retries and crash recovery can safely resume the same side effect boundary
+### 1. Postgres is the system of record
 
-What does not exist yet:
+Workflow definitions, executions, task instances, attempts, retry state, dead-letter state, outbox events, and idempotency reservations all live in Postgres.
 
-- a separate DLQ transport or richer operator tooling around replay
-- workflow versioning
-- branching or parallel workflow execution
+If Redis and Postgres disagree, Postgres wins.
 
-That distinction matters because the project is being built in stages, and the architecture is designed to support that growth cleanly.
+### 2. Redis Streams is a delivery mechanism
 
-## Core principles
+Redis is used for asynchronous transport and consumer groups. It is not trusted to be the canonical source of workflow state.
 
-- Postgres is the source of truth for workflow definitions, executions, task instances, attempts, and dispatch intent.
-- Redis Streams is only a transport for task delivery.
-- Delivery semantics are at-least-once.
-- Task handlers must be idempotent.
-- State transitions should be persisted before relying on in-memory assumptions.
+That means the worker never treats a queue message alone as permission to run work. It always checks authoritative task state in Postgres first.
 
-## Components
+### 3. Delivery is at-least-once
 
-### `apps/api`
+The architecture assumes duplicate delivery can happen because:
 
-Responsibilities:
+- the publisher can crash after publishing but before durable acknowledgement
+- the worker can crash after reading but before acking
+- stale pending messages can later be reclaimed
 
-- Expose HTTP endpoints for workflow definition creation and execution triggering
-- Persist workflow state into Postgres
-- Write outbox events as part of the same transaction as task creation
-- Run the outbox publisher loop
-- Expose `/healthz` and `/metrics`
+So the system is designed to tolerate duplicates by default.
 
-### `apps/worker`
+### 4. Idempotency is explicit
 
-Responsibilities:
+Handlers that model side effects must persist an idempotency boundary. DurableFlow uses `idempotency_records` for this so correctness is visible in storage instead of buried in handler conventions.
 
-- Consume dispatched tasks from Redis Streams consumer groups
-- Load authoritative task state from Postgres before executing work
-- Create a task attempt record
-- Execute a handler
-- Persist success or failure back to Postgres
-- Expose `/healthz` and `/metrics`
+## High-level design
 
-### `apps/web`
+The high-level design is intentionally simple: one durable database, one async transport, one API boundary, one worker boundary, and one lightweight operator UI.
 
-Responsibilities:
+```mermaid
+flowchart LR
+    User["User / Operator"] --> Web["Web Dashboard<br/>React + TypeScript"]
+    Web --> API["API Service<br/>workflow creation, execution start,<br/>reads, replay"]
+    API --> PG[("Postgres<br/>source of truth")]
+    API --> Outbox["Outbox Publisher"]
+    Outbox --> Redis[("Redis Streams<br/>async transport")]
+    Redis --> Worker["Worker Service<br/>consume, retry, chain, dead-letter"]
+    Worker --> PG
+    Worker --> Handlers["Task Handlers<br/>sample.echo, notifications.send"]
+    Handlers --> PG
+    API --> OTEL["OpenTelemetry Collector"]
+    Worker --> OTEL
+    OTEL --> Prom["Prometheus"]
+    Prom --> Graf["Grafana"]
+```
 
-- Provide a minimal manual validation shell
-- Create a workflow definition
-- Trigger an execution
-- Poll the current execution snapshot
-- Surface dead-lettered tasks that need attention
-- Replay one dead-lettered task back into the outbox flow
+Key takeaways from this diagram:
 
-The web app is still a lightweight validation dashboard, not a full operator console yet.
+- all durable state transitions end in Postgres
+- Redis only moves execution opportunities between services
+- the outbox sits between durable writes and queue publish
+- the worker is free to receive duplicate deliveries because correctness lives in Postgres and idempotent handlers
 
-### `internal/db`
+## Component responsibilities
 
-Responsibilities:
+### API service
 
-- Open the Postgres pool
-- Apply SQL migrations
-- Encapsulate data access for definitions, executions, tasks, attempts, and outbox events
+`apps/api`
 
-### `internal/orchestrator`
+The API service is responsible for:
 
-Responsibilities:
+- validating and storing workflow definitions
+- creating workflow executions
+- creating the initial task instance
+- writing outbox dispatch intent transactionally
+- exposing read APIs for executions and dead-lettered tasks
+- running the outbox publisher loop
 
-- Keep workflow-related application logic out of transport and persistence glue
-- Host the execution-start logic
-- Host the worker-side processing flow
+The API service does not execute task business logic. It creates durable orchestration state and hands off dispatch.
 
-### `internal/outbox`
+### Worker service
 
-Responsibilities:
+`apps/worker`
 
-- Poll undispatched outbox rows
-- Publish task dispatch messages to Redis Streams
-- Mark dispatch completion in Postgres
+The worker service is responsible for:
 
-### `internal/queue`
+- consuming Redis Streams messages through a consumer group
+- reclaiming stale pending messages when needed
+- loading authoritative task state from Postgres
+- starting task attempts
+- executing handlers
+- applying success, retry, dead-letter, or workflow-progression logic
 
-Responsibilities:
+The worker is where most correctness-sensitive branching lives.
 
-- Hide Redis Streams-specific concerns behind a small adapter
-- Create the consumer group if needed
-- Publish and consume task messages
-- Reclaim stale pending consumer-group deliveries before reading fresh work
+### Web dashboard
 
-### `internal/handlers`
+`apps/web`
 
-Responsibilities:
+The dashboard exists to make the system inspectable. It can:
 
-- Register handler implementations by key
-- Provide the sample task and notification handlers used by the current validation flows
+- create definitions
+- trigger executions
+- poll execution snapshots
+- display task attempts and retry state
+- list dead-lettered tasks
+- replay dead-lettered tasks
 
-### `internal/telemetry`
+It is intentionally a lightweight operator-facing shell, not a full product UI.
 
-Responsibilities:
+### Outbox publisher
 
-- Bootstrap OpenTelemetry traces
-- Expose Prometheus metrics
-- Add lightweight HTTP instrumentation
+`internal/outbox`
 
-## Current data model
+The outbox publisher is the bridge between durable database state and asynchronous Redis dispatch. It polls pending `outbox_events`, publishes task messages, and marks those outbox rows dispatched.
+
+The important architectural point is that the same outbox mechanism is reused for:
+
+- first-run task dispatch
+- retry redispatch
+- dead-letter replay
+- next-task progression
+
+That keeps the write path consistent.
+
+### Redis queue adapter
+
+`internal/queue`
+
+This package isolates Redis Streams details:
+
+- stream publishing
+- consumer-group creation
+- message decoding
+- fresh reads
+- stale pending reclaim with `XAUTOCLAIM`
+
+This keeps Redis-specific operational logic out of orchestration code.
+
+### Orchestrator layer
+
+`internal/orchestrator`
+
+This layer is where workflow semantics live:
+
+- definition parsing and validation
+- execution start logic
+- worker-side retry decisions
+- `next_task` progression
+- terminal failure and dead-letter decisions
+
+It exists so transport and persistence code do not absorb workflow rules.
+
+## Data model and why each table exists
+
+DurableFlow uses a deliberately explicit data model. The tables are not there for ceremony; each one solves a specific failure or observability problem.
 
 ### `workflow_definitions`
 
-Represents the stored definition of a workflow.
+Stores the durable definition of a workflow.
 
-Why it exists:
+Why it matters:
 
-- Lets executions point back to a stable definition
-- Gives you a home for future versioning and validation logic
+- executions can refer back to a stable definition
+- validation has a durable home
+- workflow versioning can be added later without redesigning the entire system
 
 ### `workflow_executions`
 
 Represents one run of a workflow.
 
-Why it exists:
+Why it matters:
 
-- Holds lifecycle state
-- Stores execution input and eventual output/error
-- Becomes the parent of all task instances
-- Stays `running` while a workflow advances from one task to the next
+- it is the parent entity for all task instances
+- it captures input, output, lifecycle timestamps, and final error state
+- it stays `running` while the workflow advances through multiple tasks
 
 ### `task_instances`
 
-Represents the concrete task units created for a workflow execution.
+Represents a concrete unit of work inside one execution.
 
-Why it exists:
+Why it matters:
 
-- Tracks delivery and completion state separately from the workflow execution
-- Holds handler routing metadata
-- Gives you a place for scheduling fields like `next_run_at`
-- Carries an `idempotency_key` for future hardening
-- Represents both retry wait state and linear workflow progression
-- Holds the `dead_lettered` terminal state for tasks that need manual attention
+- task state must be tracked independently from execution state
+- retries need a place for `next_run_at`
+- replay and dead-letter handling need their own lifecycle state
+- linear progression needs distinct task rows, not one mutable execution blob
+- idempotent handler execution needs a task-level key boundary
+
+This table carries some of the most important statuses in the system:
+
+- `pending`
+- `running`
+- `succeeded`
+- `failed`
+- `dead_lettered`
 
 ### `task_attempts`
 
-Represents each processing attempt for a task instance.
+Represents each processing attempt for a task.
 
-Why it exists:
+Why it matters:
 
-- Preserves execution history
-- Makes retries observable and auditable
-- Provides the retry and progression history that feeds the execution snapshot
+- retries are observable instead of hidden
+- failure history is preserved
+- execution snapshots can show operational history, not only final state
 
 ### `outbox_events`
 
-Represents dispatch intent stored in Postgres before sending to Redis.
+Represents dispatch intent that has been durably stored before Redis publish.
 
-Why it exists:
+Why it matters:
 
-- Keeps Postgres authoritative
-- Decouples durable state changes from transient dispatch
-- Provides the base for more reliable re-dispatch and recovery later
+- it solves the classic “state written but message not published” failure mode
+- it decouples workflow state transitions from queue timing
+- it provides one dispatch path for first runs, retries, replay, and progression
 
 ### `idempotency_records`
 
-Represents durable side-effect reservations and completed responses for handlers that need explicit idempotency.
+Represents durable reservations and stored successful responses for handlers that must survive duplicate delivery.
 
-Why it exists:
+Why it matters:
 
-- Prevents the same handler side effect from running twice for the same idempotency key
-- Lets a duplicate execution reuse a stored successful response
-- Makes handler-level idempotency an explicit persisted contract instead of a convention
-- Tracks which task instance currently owns an in-progress idempotency reservation
+- the same side effect should not run twice for the same logical idempotency key
+- a successfully completed response can be reused on duplicate delivery
+- the same task instance can safely resume its own in-progress reservation
+- a different task instance cannot hijack that same side-effect boundary
 
-## Current request and processing flow
+## Low-level execution flow
+
+This diagram shows the write path and recovery path together. It is the most important flow in the system because it combines the outbox, retries, dead-lettering, replay, and worker crash recovery.
 
 ```mermaid
-sequenceDiagram
-    participant Web
-    participant API
-    participant Postgres
-    participant Outbox
-    participant Redis
-    participant Worker
+flowchart TD
+    A["POST /api/executions"] --> B["Create workflow_execution,<br/>entry task_instance,<br/>and outbox_event in one transaction"]
+    B --> C["Outbox publisher polls pending rows"]
+    C --> D["Publish task.dispatch message to Redis Streams"]
+    D --> E["Worker reads or reclaims message"]
+    E --> F["Load authoritative task state from Postgres"]
+    F --> G["Start task_attempt"]
+    G --> H["Run handler"]
 
-    Web->>API: POST /api/workflows
-    API->>Postgres: insert workflow_definitions
+    H -->|success| I["Complete attempt and task"]
+    I --> J{"next_task exists?"}
+    J -->|yes| K["Create next task_instance<br/>and new outbox_event"]
+    K --> C
+    J -->|no| L["Mark workflow_execution succeeded"]
 
-    Web->>API: POST /api/executions
-    API->>Postgres: insert workflow_executions
-    API->>Postgres: insert task_instances
-    API->>Postgres: insert outbox_events
+    H -->|failure with retries left| M["Mark attempt failed,<br/>task pending,<br/>write next_run_at"]
+    M --> N["Scheduler finds due retry"]
+    N --> O["Create retry outbox_event"]
+    O --> C
 
-    Outbox->>Postgres: poll undispatched outbox rows
-    Outbox->>Redis: publish task message
-    Outbox->>Postgres: mark outbox row dispatched
-
-    Worker->>Redis: XREADGROUP
-    Worker->>Postgres: load task + insert task_attempts
-    Worker->>Worker: run handler
-    Worker->>Postgres: mark task and execution succeeded
-    Worker->>Redis: XACK
+    H -->|failure with retries exhausted| P["Mark task dead_lettered<br/>and execution failed"]
+    P --> Q["Task appears in dead-letter API and UI"]
+    Q --> R["Manual replay resets task<br/>and creates replay outbox_event"]
+    R --> C
 ```
 
-## Current implementation boundaries
+The most important property here is that initial dispatch, retry dispatch, next-task dispatch, and replay dispatch all converge back into the same outbox path.
 
-The current vertical slice is still intentionally smaller than a full graph engine:
+## Task lifecycle state machine
 
-- one workflow execution starts from one entry task
-- one successful task can enqueue one `next_task`
-- one retryable failure can schedule later redispatch through the outbox
-- one outbox event becomes one Redis dispatch
-- the sample handler is used to validate the durability path, not business complexity
+The task state machine is small on purpose. It is easier to reason about correctness when the task lifecycle is explicit and finite.
 
-For now, this is enough to prove the main architecture seams without trying to build every workflow-engine feature at once.
+```mermaid
+stateDiagram-v2
+    [*] --> pending
+    pending --> running: worker starts attempt
+    running --> succeeded: handler succeeds
+    running --> pending: retry scheduled
+    running --> dead_lettered: retries exhausted
+    dead_lettered --> pending: manual replay
+    succeeded --> [*]
+```
 
-## Why the outbox matters here
+## Main workflow paths
 
-Without an outbox, the API could write task state to Postgres and then crash before publishing to Redis, leaving work stranded. With an outbox row, the dispatch intent is durable even if the publish step happens later.
+### Path 1: execution creation
 
-The outbox processor is not hardened yet, but the persistence seam is already there.
+When a client triggers an execution:
 
-## Why at-least-once changes the design
+1. the API loads and validates the referenced workflow definition
+2. it creates a `workflow_executions` row
+3. it creates the entry `task_instances` row
+4. it creates an `outbox_events` row in the same transaction
 
-Redis Streams consumer groups can redeliver work, and a publisher can also re-publish if it crashes between external publish and durable acknowledgement.
+This is the first important durability boundary. The system never relies on publishing to Redis before the database acknowledges intent.
 
-That means:
+### Path 2: dispatch through the outbox
 
-- Duplicate task messages are normal, not exceptional
-- Worker logic must read task state from Postgres before doing work
-- Handlers should be safe to run more than once
+The outbox publisher:
 
-The sample and notification handlers are still intentionally simple, but they now persist idempotency records to model how a real side-effect boundary can behave under duplicate delivery.
+1. polls pending outbox rows
+2. publishes task messages to Redis Streams
+3. marks the outbox rows dispatched in Postgres
 
-## Why I structured it this way
+The publisher treats Redis publish as a downstream side effect of a Postgres fact, not the other way around.
 
-Each major concern already has a clear home:
+### Path 3: worker success
 
-- HTTP and request decoding live in `internal/httpapi`
-- orchestration logic lives in `internal/orchestrator`
-- database writes and reads live in `internal/db`
-- async transport details live in `internal/queue`
-- durable dispatch bridging lives in `internal/outbox`
-- task business logic lives in `internal/handlers`
+When a worker processes a message successfully:
 
-That separation keeps the code approachable while still resembling a real service architecture. It also lets me extend one subsystem at a time without turning every new feature into a full-codebase refactor.
+1. it loads the authoritative task row
+2. it starts a `task_attempts` row
+3. it runs the handler
+4. it marks the attempt succeeded
+5. it marks the task succeeded
+6. if the task has a `next_task`, it creates the next task row plus a new outbox row
+7. otherwise it marks the workflow execution succeeded
 
-## Known intentional gaps
+This is how DurableFlow moves from a single task engine to a linear workflow engine.
 
-These are not missing by accident. They are the next learning steps.
+### Path 4: retryable failure
 
-- Workflow definitions are not yet expanded into real task graphs
-- Workflow versioning is not implemented
-- Cancellation is not implemented
-- Handler-level idempotency is now explicit for the built-in handlers, though broader real-world integrations would still need their own policy details
-- Replay behavior is basic and does not yet include audit-specific operator tooling
+If the handler fails but retries remain:
 
-## Extension points
+1. the attempt is marked failed
+2. the task goes back to `pending`
+3. `next_run_at` is written with the future retry time
+4. the execution remains `running`
 
-### Definition-driven graph expansion
+Later, the scheduler materializes a new outbox row once `next_run_at` becomes due.
 
-Primary seam:
+The important detail is that retries are persisted as state, not held in memory.
 
-- [internal/orchestrator/service.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/service.go)
-- [internal/db/store.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/db/store.go)
+### Path 5: exhausted failure
 
-Current behavior:
+If the handler fails and retries are exhausted:
 
-- One hardcoded sample task is created per execution
+1. the attempt is marked failed
+2. the task is marked `dead_lettered`
+3. the execution is marked `failed`
+4. timestamps and error text are preserved
 
-Future direction:
+The failure remains durable and inspectable.
 
-- Parse the stored workflow definition
-- Generate task instances from the graph
-- Track dependencies and ready-to-run tasks
+### Path 6: dead-letter replay
 
-### Retries and backoff
+Replay does not bypass the normal dispatch system.
 
-Primary seam:
+When a dead-lettered task is replayed:
 
-- [internal/db/store.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/db/store.go:279)
-- [internal/orchestrator/worker.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/worker.go)
+1. the task is reset to a runnable state in Postgres
+2. the parent execution is moved back to `running`
+3. a new outbox row is created
+4. the outbox publisher sends it through Redis like any other task
 
-Future direction:
+That consistency is important. Replay is recovery, not a special shortcut.
 
-- Fail attempts without always failing the whole workflow immediately
-- Compute next retry time
-- Requeue only when retry policy allows it
+### Path 7: crash recovery
 
-### Delayed execution and scheduler
+If a worker crashes after claiming a Redis Streams message, the delivery may remain pending in the consumer group. DurableFlow handles that by reclaiming stale pending messages with `XAUTOCLAIM` before reading fresh `>` messages.
 
-Primary seam:
+Reclaimed messages still go through the same worker code path and still consult Postgres first. That design avoids a second “recovery-only” execution path with different semantics.
 
-- `task_instances.next_run_at`
-- `outbox_events.available_at`
+## Why the outbox pattern matters here
 
-Future direction:
+The outbox is one of the most important pieces of the system.
 
-- Scheduler loop scans ready tasks in Postgres
-- Scheduler writes outbox events when a delayed task becomes runnable
+Without it, the API could:
 
-### Crash recovery
+1. write a workflow execution and task row
+2. crash before publishing to Redis
 
-Primary seam:
+At that point, the workflow would exist durably but the work would never be dispatched.
 
-- `task_attempts`
-- Redis consumer-group pending entries
+The outbox solves that by making dispatch intent a durable database fact. Publishing becomes retryable because the system can always go back to Postgres and find the undispatched work.
 
-Future direction:
+## Why retries are persisted instead of slept
 
-- inspect Redis pending entries
-- reclaim abandoned deliveries carefully
-- reconcile Redis delivery state against authoritative Postgres task state
+A common beginner design is to fail in the worker and then sleep before retrying.
 
-## Project evolution strategy
+DurableFlow does not do that because sleeping in process creates fragile behavior:
 
-The intended build order is:
+- restart loses retry intent
+- the worker holds resources doing nothing
+- retry state becomes invisible
 
-1. prove a minimal durable happy path
-2. replace hardcoded task creation with definition-driven behavior
-3. make reads and debugging better
-4. add retries and delayed scheduling
-5. harden failure handling and recovery
-6. only then add more advanced product features
+By writing `next_run_at`, the system turns retry timing into durable data. That makes retries inspectable and restart-safe.
 
-That ordering is intentional. In workflow systems, I think getting the state model right early matters more than adding lots of features quickly.
-- `task_instances.status`
+## Why dead-lettering is a task state, not a separate queue
 
-Future direction:
+At this stage, dead-lettering is modeled in Postgres rather than as a separate Redis DLQ stream.
 
-- Reconcile in-flight attempts after crashes
-- Reclaim pending stream messages
-- Decide whether the source of truth says the task should resume, retry, or stop
+That choice was intentional:
 
-### Idempotency hardening
+- Postgres is already the authoritative source of task state
+- dead-lettering is fundamentally an operational state transition
+- list and replay operations become simpler when the state is queryable directly
 
-Primary seam:
+This keeps failure handling close to the authoritative task state and makes listing and replay straightforward. A separate DLQ transport could be added later if operational needs justify it.
 
-- `task_instances.idempotency_key`
-- handler boundary in [internal/handlers](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/handlers)
+## Why idempotency needed its own table
 
-Future direction:
+Task-level status alone is not enough to prove side-effect safety.
 
-- Persist deduplication markers per side effect
-- Make external integrations safe under duplicate delivery
+For example, a handler might:
+
+1. call an external system successfully
+2. crash before finishing local persistence
+
+Without a durable idempotency record, the next delivery cannot safely know whether the side effect already happened.
+
+`idempotency_records` solves that by making the side-effect boundary explicit. A handler can:
+
+- reserve the idempotency key
+- complete it with a stored response
+- release it if setup fails
+- allow the same task instance to resume if recovery is needed
+
+That is a major correctness improvement over “best effort” deduplication.
+
+## Current scope and deliberate limitations
+
+DurableFlow is intentionally strong on infrastructure correctness and intentionally narrow on workflow expressiveness.
+
+What it supports today:
+
+- definition-driven execution
+- linear `next_task` chaining
+- retries with backoff
+- dead-letter and replay
+- crash recovery
+- handler-level idempotency
+
+What it does not support yet:
+
+- workflow versioning
+- branching or parallel task graphs
+- cancellation and timeout policies
+- richer operator audit tooling
+- broader integration-specific idempotency policies
+
+Those are not oversights. They were deferred so the system could get the hard durability boundaries right first.
+
+## A simple mental model of the system
+
+DurableFlow uses Postgres to decide what should happen, Redis to deliver opportunities to do that work, and idempotent handlers to make duplicate opportunities safe.
+
+Those three pieces form the core of the architecture.

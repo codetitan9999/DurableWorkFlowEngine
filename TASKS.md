@@ -1,389 +1,175 @@
-# DurableFlow Learning Roadmap
+# DurableFlow Roadmap
 
-This file is the implementation backlog for the project.
+This file is the project roadmap, but it is also a record of how the system was built.
 
-I keep it for two reasons:
+I do not want this repository to look like a giant “future ideas” list with no proof behind it. The sections below separate what is already real from what is still intentionally unfinished.
 
-- to keep the project honest about what is still unfinished
-- to make the roadmap visible instead of leaving the next steps vague
+## Current state
 
-The phases below are ordered from easiest to hardest. Each one builds on the current codebase and pushes the project a little closer to a real workflow engine.
+DurableFlow is already a serious distributed-systems project, not just a scaffold.
 
-## Status summary
+The current build includes:
 
-Completed foundation:
+- durable workflow definitions and executions in Postgres
+- transactional outbox-based dispatch
+- Redis Streams worker consumption
+- retry scheduling with persisted `next_run_at`
+- linear multi-step workflow chaining
+- dead-lettered task listing and replay
+- stale pending-message reclaim for crashed workers
+- handler-level idempotency with durable reservations and stored responses
+- a dashboard for execution inspection and dead-letter recovery
 
-- local multi-service development stack
-- schema and migrations
-- API and worker skeletons
-- outbox-based happy path
-- sample handler processing
-- dashboard-based manual validation
-- starter metrics and tracing bootstrap
-- definition-driven entry task creation
-- execution snapshots with task attempts
-- retry policy, backoff scheduling, and outbox-based retry redispatch
-- linear task chaining through `next_task`
-- Postgres-backed dead-lettered task listing and replay
-- Redis consumer-group reclaim for stale pending deliveries
+The main things still missing are:
 
-Still to build:
-
-- richer graph execution beyond linear `next_task`
 - workflow versioning
+- richer graph execution beyond linear `next_task`
+- deeper observability and operator tooling
 
-The phases below describe that remaining work in the order I plan to tackle it.
+## Completed milestones
 
-## Phase 1: Replace hardcoded task creation with definition parsing
+### Phase 1: definition-driven execution
 
-Status: completed
+The project started by moving from hardcoded task creation to stored workflow definitions with validation.
 
-### Build
+Why it mattered:
 
-Read the stored workflow definition and create task instances from it instead of always creating one hardcoded sample task.
+- it turned the project into a workflow engine instead of a fixed async demo
+- it created the seam for later versioning and graph expansion
 
-### Why it matters
+### Phase 2: execution snapshots and attempt visibility
 
-This is the first real step from “demo pipeline” to “workflow engine.” It teaches you how orchestration logic should depend on durable definitions rather than ad hoc code paths.
+Execution reads were expanded to include task attempts, timestamps, and failure details.
 
-### Learn first
+Why it mattered:
 
-- JSON schema design
-- Graph modeling basics
-- Validation of user-defined configs
-- Transaction boundaries in orchestrators
+- it made retries and failures explainable
+- it forced the data model to support observability instead of treating it as an afterthought
 
-### Files to touch
+### Phase 3: retries with persisted scheduling
 
-- [internal/orchestrator/service.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/service.go)
-- [internal/db/store.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/db/store.go)
-- [internal/domain/models.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/domain/models.go)
+Task failures stopped being immediately terminal. Retry policy and backoff were added, with future execution stored in `task_instances.next_run_at`.
 
-### Acceptance criteria
+Why it mattered:
 
-- A workflow definition can describe at least multiple tasks
-- Triggering an execution creates task rows based on the definition
-- The sample workflow still works through the new definition path
-- Invalid definitions are rejected with a clear API error
+- retry intent survives restarts
+- the system became operationally useful, not just functionally correct on the happy path
 
-### Optional hints
+### Phase 4: delayed redispatch through the outbox
 
-- Start with a very small definition format: list of tasks plus one entry task
-- Do not implement branching yet unless you want the stretch challenge
+A scheduler loop was added to materialize retryable tasks back into `outbox_events` when their retry time arrives.
 
-## Phase 2: Add execution-read APIs that expose attempts and timelines
+Why it mattered:
 
-Status: completed
+- initial execution and delayed retries now share the same durable dispatch path
+- retry timing is driven by persisted state instead of in-memory sleeps
 
-### Build
+### Phase 5: dead-letter handling and replay
 
-Expand the read side so the API can return task attempts, timestamps, and failure details for an execution.
+Tasks that exhaust retries are now marked `dead_lettered`, exposed through the API and dashboard, and replayable manually.
 
-### Why it matters
+Why it mattered:
 
-Good engines are debuggable. This phase is where observability starts to show up in the data model and read APIs, not just in metrics dashboards.
+- failure is no longer just recorded; it is operable
+- the system has a clear answer for “what needs attention?”
 
-### Learn first
+### Phase 6: crash recovery for stale pending deliveries
 
-- Read models
-- API response shaping
-- Query performance and indexing
+Redis Streams consumer-group recovery was added with `XAUTOCLAIM` so stale pending messages can be reclaimed safely after worker crashes.
 
-### Files to touch
+Why it mattered:
 
-- [internal/db/store.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/db/store.go)
-- [internal/httpapi/router.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/httpapi/router.go)
-- [apps/web/src/App.tsx](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/apps/web/src/App.tsx)
+- abandoned queue deliveries no longer stay stuck forever
+- the project now models one of the most important real-world queue recovery problems
 
-### Acceptance criteria
+### Phase 7: explicit idempotency guarantees
 
-- Execution responses include attempts and failure context
-- The dashboard shell can show attempt history
-- Query paths stay simple and understandable
+Handler-level idempotency was strengthened with `idempotency_records`, task-owned reservations, stored successful responses, and safe resume behavior for the same task instance.
 
-### Optional hints
+Why it mattered:
 
-- Resist premature CQRS complexity
-- A richer execution snapshot endpoint is enough for now
+- duplicate delivery is now treated as a first-class correctness problem
+- crash recovery and retries can coexist with side-effect safety
 
-## Phase 3: Implement retry policy with backoff
+## Remaining roadmap
 
-Status: completed
+The remaining work is no longer “make it distributed.” That part is already real. The remaining work is about making the engine broader, easier to evolve, and easier to operate.
 
-### Build
+### Phase 8: workflow versioning
 
-Add retry-aware failure handling so task failures create another attempt later instead of always failing terminally.
+Goal:
 
-### Why it matters
+- allow multiple immutable versions of the same workflow definition
+- bind each execution to the exact version it started with
 
-Retries are where workflow engines become operationally useful, and where state-modeling mistakes become visible quickly.
+Why it matters:
 
-### Learn first
+- workflow engines need historical stability
+- changing a definition in place is dangerous once real executions exist
 
-- Exponential backoff
-- Retry budgets and max attempts
-- Failure classification
-- Idempotency requirements under retries
+What this phase would likely change:
 
-### Files to touch
+- versioned workflow-definition storage
+- execution reads that surface version metadata
+- stricter validation and creation rules around definition updates
 
-- [internal/orchestrator/worker.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/worker.go)
-- [internal/db/store.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/db/store.go)
-- [internal/domain/models.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/domain/models.go)
-- [migrations/001_init.sql](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/migrations/001_init.sql) or a new migration
+### Phase 9: richer graph execution
 
-### Acceptance criteria
+Goal:
 
-- A failed task can retry up to a configured limit
-- Retry timing is persisted in Postgres
-- Each attempt is recorded in `task_attempts`
-- Final terminal failure still persists clearly
+- move beyond a linear `next_task` chain
+- support branching or parallel progression safely
 
-### Optional hints
+Why it matters:
 
-- Add a retry policy to the workflow definition or task model
-- Persist the next eligible run time rather than sleeping in the worker
+- linear workflows prove the state machine shape, but they do not cover the full orchestration problem
+- this is the phase where DurableFlow would start resembling a more general workflow engine
 
-## Phase 4: Build a delayed-task scheduler
+What this phase would likely change:
 
-Status: completed
+- task dependency modeling
+- readiness checks for runnable tasks
+- multiple task creation paths after one task completes
 
-### Build
+### Phase 10: stronger observability and operator tooling
 
-Create a scheduler loop that scans Postgres for tasks whose `next_run_at` has arrived and writes dispatch events into the outbox.
+Goal:
 
-### Why it matters
+- make it easier to operate the system under load or failure
 
-This phase forces you to think like a durable system: time-based state changes should be data-driven and restart-safe.
+Why it matters:
 
-### Learn first
+- the project already persists rich state, but better dashboards, metrics, and audit flows would make that state more actionable
 
-- Polling schedulers
-- Leases and concurrency control
-- “Ready queue” patterns
-- Time-based orchestration
+What this phase would likely change:
 
-### Files to touch
+- richer Prometheus metrics
+- more useful Grafana dashboards
+- better replay/audit history in the UI
+- clearer queue lag and retry trend visibility
 
-- [internal/outbox](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/outbox)
-- [internal/db/store.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/db/store.go)
-- [apps/api/main.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/apps/api/main.go) or a dedicated scheduler service
+## Recommended next order
 
-### Acceptance criteria
+Recommended sequence:
 
-- Retriable tasks are redispatched when their scheduled time arrives
-- Restarting the scheduler does not lose delayed work
-- Dispatch intent still flows through Postgres first
+1. workflow versioning
+2. richer graph execution
+3. deeper observability
 
-### Optional hints
+That order is intentional.
 
-- Keep the scheduler small at first
-- Use row-level ownership or careful updates to avoid duplicate scheduling
+Versioning should come before more expressive workflow graphs because graph complexity is harder to manage if the definition model itself is still mutable in place.
 
-## Phase 5: Add dead-letter queue behavior
+## Roadmap summary
 
-Status: completed
+The roadmap is short now because most of the hard foundational work is already done.
 
-### Build
+What remains is not “add retries” or “add dead letters.” Those pieces already exist.
 
-Introduce terminal routing for tasks that exceed retry policy or fail with non-retriable errors.
+What remains is the next tier of workflow-engine concerns:
 
-### Why it matters
+- immutable definition evolution
+- broader orchestration semantics
+- stronger operational tooling
 
-DLQs are part of making failure modes explicit and operable instead of invisible.
-
-### Learn first
-
-- Terminal vs transient failures
-- Failure triage workflows
-- Operational replay patterns
-
-### Files to touch
-
-- [internal/db/store.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/db/store.go)
-- [internal/orchestrator/worker.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/worker.go)
-- [ARCHITECTURE.md](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/ARCHITECTURE.md)
-
-### Acceptance criteria
-
-- Terminally failed tasks are clearly marked
-- DLQ state is queryable from Postgres
-- You can distinguish retry exhaustion from hard validation failures
-- A dead-lettered task can be replayed manually through the same outbox path
-
-### Optional hints
-
-- You do not need a second Redis stream yet
-- A Postgres-backed DLQ view or table is a clean first version
-
-## Phase 6: Harden consumer crash recovery
-
-Status: completed
-
-### Build
-
-Handle worker crashes and pending Redis consumer-group entries by reconciling Redis delivery state with Postgres task state.
-
-### Why it matters
-
-This is where durable systems become real. It teaches the difference between “queued,” “in progress,” and “durably recoverable.”
-
-### Learn first
-
-- Redis Streams pending entries
-- Consumer groups and message claiming
-- Heartbeats and leases
-- Recovery reconciliation
-
-### Files to touch
-
-- [internal/queue/redis_streams.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/queue/redis_streams.go)
-- [internal/orchestrator/worker.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/worker.go)
-- [internal/db/store.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/db/store.go)
-
-### Acceptance criteria
-
-- Stuck pending messages can be reclaimed
-- Duplicate reprocessing does not corrupt durable state
-- Crash recovery behavior is documented clearly
-
-### Optional hints
-
-- Start by inspecting the Redis pending-entry list
-- Postgres should decide whether reclaimed work is still valid to run
-
-## Phase 7: Strengthen idempotency guarantees
-
-Status: completed
-
-### Build
-
-Move from “best effort task-level idempotency” to explicit side-effect idempotency boundaries.
-
-### Why it matters
-
-At-least-once delivery only works in practice when side effects are safe under duplication.
-
-### Learn first
-
-- Idempotency keys
-- Deduplication stores
-- External API write semantics
-- Exactly-once myths
-
-### Files to touch
-
-- [internal/handlers](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/handlers)
-- [internal/domain/models.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/domain/models.go)
-- [migrations](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/migrations)
-
-### Acceptance criteria
-
-- A handler can safely resume or repeat without duplicating its side effect
-- Idempotency strategy is explicit in code and docs
-- Failure and retry paths preserve the same idempotency contract
-- A dedicated idempotency table persists in-progress reservations and completed responses
-- The same task instance can safely resume an in-progress reservation after retries or crash recovery
-
-### Optional hints
-
-- Think in terms of “what external thing could be done twice?”
-- A dedicated idempotency table is often clearer than implicit logic
-
-## Phase 8: Add workflow versioning
-
-### Build
-
-Allow multiple versions of a workflow definition and ensure executions bind to a specific version immutably.
-
-### Why it matters
-
-Workflow systems need stable historical behavior. Versioning teaches immutability, migration, and compatibility tradeoffs.
-
-### Learn first
-
-- Immutable definitions
-- Compatibility and rollout strategies
-- Metadata vs behavior versioning
-
-### Files to touch
-
-- [internal/db/store.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/db/store.go)
-- [internal/orchestrator/service.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/service.go)
-- [migrations](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/migrations)
-
-### Acceptance criteria
-
-- New workflow versions can be created without mutating old ones
-- Executions always reference the intended version
-- Reads make workflow version visible
-
-### Optional hints
-
-- Decide whether `name` stays unique or `name + version` becomes the unique key
-
-## Phase 9: Improve observability for operations and debugging
-
-### Build
-
-Expand metrics, traces, and dashboard panels to show queue lag, attempt counts, retry outcomes, and failure rates.
-
-### Why it matters
-
-You cannot operate workflow infrastructure blindly. This phase helps you connect internal state transitions to operational signals.
-
-### Learn first
-
-- RED metrics
-- Queue lag and throughput
-- Trace spans across async boundaries
-- Useful dashboards vs noisy dashboards
-
-### Files to touch
-
-- [internal/telemetry/telemetry.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/telemetry/telemetry.go)
-- [deployments/observability](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/deployments/observability)
-- [apps/web](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/apps/web)
-
-### Acceptance criteria
-
-- You can answer “what is failing, how often, and where?”
-- Async spans are traceable across API, outbox, and worker stages
-- Grafana shows at least one useful queue/attempt dashboard
-
-### Optional hints
-
-- Start with counters and timestamps you already persist
-- Derive queue lag from durable timestamps before chasing perfect metrics
-
-## Phase 10: Add an AI assist layer last
-
-### Build
-
-After the engine is operationally trustworthy, add AI helpers for workflow generation and failure summarization.
-
-### Why it matters
-
-AI can accelerate authoring and debugging, but only after the core system is deterministic and observable.
-
-### Learn first
-
-- Structured generation
-- Guardrails for user-defined automation
-- Failure summarization from traces and DB state
-
-### Files to touch
-
-- [apps/api](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/apps/api)
-- [apps/web](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/apps/web)
-- New AI-specific packages once the engine is stable
-
-### Acceptance criteria
-
-- AI suggestions never become the source of truth
-- The system can explain failures from durable state, not from guesses
-- AI features are optional layers on top of a reliable engine
-
-### Optional hints
-
-- Start with read-only assistance before generation that mutates definitions
+That is exactly where I want the project to be at this stage.
