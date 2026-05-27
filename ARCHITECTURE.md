@@ -137,10 +137,10 @@ The dashboard is built around four concrete operator states:
 
 Reference screenshots:
 
-- [Overview](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/docs/screenshots/01-overview.jpeg)
-- [Successful execution](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/docs/screenshots/02-successful-execution.jpeg)
-- [Dead-letter handling](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/docs/screenshots/03-dead-letter-panel.jpeg)
-- [Replay flow](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/docs/screenshots/04-replay-response.jpeg)
+- [Overview](docs/screenshots/01-overview.jpeg)
+- [Successful execution](docs/screenshots/02-successful-execution.jpeg)
+- [Dead-letter handling](docs/screenshots/03-dead-letter-panel.jpeg)
+- [Replay flow](docs/screenshots/04-replay-response.jpeg)
 
 ### Outbox publisher
 

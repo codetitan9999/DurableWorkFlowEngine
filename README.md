@@ -173,25 +173,25 @@ The dashboard is intentionally small, but each panel maps directly to a core par
 
 The overview screen shows the full operator surface in its empty state: create a workflow, trigger an execution, inspect the latest API response, and monitor dead-lettered tasks from one place.
 
-![Dashboard overview](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/docs/screenshots/01-overview.jpeg)
+![Dashboard overview](docs/screenshots/01-overview.jpeg)
 
 ### 2. Successful multi-step execution
 
 This state shows a completed linear workflow. The execution snapshot captures both task instances, their attempts, timestamps, and final `succeeded` status while the response panel shows the latest API payload that drove the UI.
 
-![Successful execution snapshot](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/docs/screenshots/02-successful-execution.jpeg)
+![Successful execution snapshot](docs/screenshots/02-successful-execution.jpeg)
 
 ### 3. Dead-letter handling
 
 This state shows a workflow that failed terminally because its handler was intentionally missing. The execution snapshot shows the task as `dead_lettered`, preserves attempt history, and surfaces the terminal error without needing to inspect the database directly.
 
-![Dead-letter handling](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/docs/screenshots/03-dead-letter-panel.jpeg)
+![Dead-letter handling](docs/screenshots/03-dead-letter-panel.jpeg)
 
 ### 4. Replay flow
 
 Replay takes a dead-lettered task, moves it back into the durable dispatch path, and shows the updated state in the same UI. This is useful for recovery demos because replay is not a special one-off command; it reuses the same outbox-driven execution machinery as the original run.
 
-![Replay flow](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/docs/screenshots/04-replay-response.jpeg)
+![Replay flow](docs/screenshots/04-replay-response.jpeg)
 
 ## Repository map
 
@@ -218,13 +218,13 @@ deployments/    local observability config
 
 Suggested reading order:
 
-1. [ARCHITECTURE.md](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/ARCHITECTURE.md) for the design and invariants
-2. [migrations/001_init.sql](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/migrations/001_init.sql) and later migrations for the real data model
-3. [internal/orchestrator/service.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/service.go) for execution creation
-4. [internal/outbox/publisher.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/outbox/publisher.go) for durable dispatch
-5. [internal/orchestrator/worker.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/worker.go) for retry, chaining, and failure behavior
-6. [internal/queue/redis_streams.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/queue/redis_streams.go) for consumer-group delivery and reclaim
-7. [internal/db/idempotency.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/db/idempotency.go) for the side-effect safety contract
+1. [ARCHITECTURE.md](ARCHITECTURE.md) for the design and invariants
+2. [migrations/001_init.sql](migrations/001_init.sql) and later migrations for the real data model
+3. [internal/orchestrator/service.go](internal/orchestrator/service.go) for execution creation
+4. [internal/outbox/publisher.go](internal/outbox/publisher.go) for durable dispatch
+5. [internal/orchestrator/worker.go](internal/orchestrator/worker.go) for retry, chaining, and failure behavior
+6. [internal/queue/redis_streams.go](internal/queue/redis_streams.go) for consumer-group delivery and reclaim
+7. [internal/db/idempotency.go](internal/db/idempotency.go) for the side-effect safety contract
 
 ## Local setup
 
@@ -331,5 +331,5 @@ Those gaps are intentional. The difficult infrastructure pieces were built first
 
 ## What to read next
 
-- [ARCHITECTURE.md](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/ARCHITECTURE.md) for a deeper explanation of the system design
-- [TASKS.md](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/TASKS.md) for the implementation history and remaining roadmap
+- [ARCHITECTURE.md](ARCHITECTURE.md) for a deeper explanation of the system design
+- [TASKS.md](TASKS.md) for the implementation history and remaining roadmap

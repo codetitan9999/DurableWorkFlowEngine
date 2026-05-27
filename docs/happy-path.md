@@ -13,9 +13,9 @@ Right now the project validates one intentionally thin path:
 
 Useful places to inspect:
 
-- API bootstrapping: [apps/api/main.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/apps/api/main.go)
-- Worker bootstrapping: [apps/worker/main.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/apps/worker/main.go)
-- Execution creation: [internal/orchestrator/service.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/service.go)
-- Outbox publishing: [internal/outbox/publisher.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/outbox/publisher.go)
-- Task consumption: [internal/queue/redis_streams.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/queue/redis_streams.go)
-- Task processing: [internal/orchestrator/worker.go](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/internal/orchestrator/worker.go)
+- API bootstrapping: [apps/api/main.go](../apps/api/main.go)
+- Worker bootstrapping: [apps/worker/main.go](../apps/worker/main.go)
+- Execution creation: [internal/orchestrator/service.go](../internal/orchestrator/service.go)
+- Outbox publishing: [internal/outbox/publisher.go](../internal/outbox/publisher.go)
+- Task consumption: [internal/queue/redis_streams.go](../internal/queue/redis_streams.go)
+- Task processing: [internal/orchestrator/worker.go](../internal/orchestrator/worker.go)
