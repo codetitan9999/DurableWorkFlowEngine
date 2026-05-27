@@ -376,8 +376,8 @@ func TestHandleDispatchedTaskDeadLettersWhenAttemptsAreExhausted(t *testing.T) {
 		TaskID:     "task-3",
 		HandlerKey: "payments.charge",
 	})
-	if err == nil {
-		t.Fatal("expected terminal failure to return the handler error")
+	if err != nil {
+		t.Fatalf("expected terminal failure to be persisted and acknowledged cleanly, got %v", err)
 	}
 
 	if store.failedTaskCall == nil {
@@ -391,5 +391,60 @@ func TestHandleDispatchedTaskDeadLettersWhenAttemptsAreExhausted(t *testing.T) {
 	}
 	if store.completeTaskCall != nil || store.advanceTaskCall != nil {
 		t.Fatal("did not expect success completion paths during terminal failure")
+	}
+}
+
+func TestHandleDispatchedTaskDeadLettersMissingHandlerWithoutReturningError(t *testing.T) {
+	store := &stubWorkerStore{
+		task: domain.TaskInstance{
+			ID:                  "task-4",
+			WorkflowExecutionID: "exec-3",
+			TaskName:            "charge-card",
+		},
+		execution: domain.WorkflowExecution{
+			ID:                   "exec-3",
+			WorkflowDefinitionID: "wf-3",
+		},
+		workflowDefinition: domain.WorkflowDefinition{
+			ID: "wf-3",
+			DefinitionJSON: []byte(`{
+				"entry_task": "charge-card",
+				"tasks": [
+					{
+						"name": "charge-card",
+						"handler_key": "payments.charge",
+						"max_attempts": 1
+					}
+				]
+			}`),
+		},
+		startTask: domain.TaskInstance{
+			ID:         "task-4",
+			TaskName:   "charge-card",
+			HandlerKey: "payments.charge",
+		},
+		startAttempt: domain.TaskAttempt{
+			ID:            "attempt-1",
+			AttemptNumber: 1,
+		},
+	}
+
+	worker := newTestWorker(t, store, stubHandler{
+		key: "sample.echo",
+	})
+
+	err := worker.HandleDispatchedTask(context.Background(), queue.TaskMessage{
+		TaskID:     "task-4",
+		HandlerKey: "payments.charge",
+	})
+	if err != nil {
+		t.Fatalf("expected missing-handler dead-letter to be persisted and acknowledged cleanly, got %v", err)
+	}
+
+	if store.failedTaskCall == nil {
+		t.Fatal("expected missing handler to dead-letter the task")
+	}
+	if store.scheduledRetryCall != nil {
+		t.Fatal("did not expect retry scheduling for missing handler path")
 	}
 }

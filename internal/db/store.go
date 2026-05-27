@@ -360,7 +360,7 @@ func (s *Store) StartTaskAttempt(ctx context.Context, taskID string) (domain.Tas
 		return domain.TaskInstance{}, domain.TaskAttempt{}, false, err
 	}
 
-	if task.Status == domain.TaskStatusSucceeded || task.Status == domain.TaskStatusRunning {
+	if task.Status == domain.TaskStatusSucceeded || task.Status == domain.TaskStatusRunning || task.Status == domain.TaskStatusDeadLettered {
 		return task, domain.TaskAttempt{}, true, tx.Commit(ctx)
 	}
 

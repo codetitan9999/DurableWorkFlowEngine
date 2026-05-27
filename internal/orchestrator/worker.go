@@ -97,7 +97,8 @@ func (w *Worker) HandleDispatchedTask(ctx context.Context, message queue.TaskMes
 			return fmt.Errorf("persist missing-handler failure: %w", persistErr)
 		}
 		telemetry.TasksProcessed.WithLabelValues("worker", message.HandlerKey, "missing_handler").Inc()
-		return err
+		w.logger.WarnContext(ctx, "task dead-lettered because no handler is registered", "task_id", task.ID, "attempt_id", attempt.ID, "handler_key", task.HandlerKey)
+		return nil
 	}
 
 	output, err := handler.Handle(ctx, task)
@@ -118,7 +119,8 @@ func (w *Worker) HandleDispatchedTask(ctx context.Context, message queue.TaskMes
 			return fmt.Errorf("persist terminal task failure: %w", persistErr)
 		}
 		telemetry.TasksProcessed.WithLabelValues("worker", message.HandlerKey, "failed").Inc()
-		return err
+		w.logger.WarnContext(ctx, "task dead-lettered after exhausting attempts", "task_id", task.ID, "attempt_id", attempt.ID, "error", err.Error())
+		return nil
 	}
 
 	if nextTaskSpec, hasNextTask, err := FindNextTaskSpec(workflowSpec, task.TaskName); err != nil {

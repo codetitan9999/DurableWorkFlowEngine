@@ -48,6 +48,13 @@ type ExecutionSnapshot = {
   tasks: TaskSnapshot[];
 };
 
+function normalizeExecutionSnapshot(snapshot: ExecutionSnapshot): ExecutionSnapshot {
+  return {
+    ...snapshot,
+    tasks: Array.isArray(snapshot.tasks) ? snapshot.tasks : []
+  };
+}
+
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
 
 const defaultDefinition = `{
@@ -162,7 +169,7 @@ export default function App() {
         );
       }
 
-      setDeadLetterTasks(data as TaskInstance[]);
+      setDeadLetterTasks(Array.isArray(data) ? data : []);
       setDeadLetterError("");
     } catch (error) {
       setDeadLetterError(
@@ -184,7 +191,7 @@ export default function App() {
           throw new Error(`Failed to load execution ${executionId}`);
         }
 
-        const data = (await response.json()) as ExecutionSnapshot;
+        const data = normalizeExecutionSnapshot((await response.json()) as ExecutionSnapshot);
         if (!cancelled) {
           setSnapshot(data);
         }
