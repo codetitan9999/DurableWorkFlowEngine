@@ -17,9 +17,10 @@ This repository is intentionally incomplete. Right now it has a runnable foundat
 What works today:
 
 - Working local stack with API, worker, dashboard, Postgres, Redis, and observability services
-- One verified end-to-end happy path from workflow creation to task completion
-- Basic schema, orchestration, outbox dispatch, and worker processing in place
-- Many production-shaping features still intentionally pending
+- Verified end-to-end workflow execution from definition creation to final task completion
+- Retry-aware task execution with durable `next_run_at` scheduling and outbox-based redispatch
+- Linear multi-step workflow chaining with one task able to enqueue the next task
+- Execution snapshots that expose task attempts, retry state, and progression through the workflow
 
 I want the repo to reflect the current state of the build clearly, with the foundation in place and the next phases mapped out.
 
@@ -67,23 +68,24 @@ Today, the repo proves that this flow works:
 1. Create a workflow definition
 2. Trigger an execution
 3. Persist execution state in Postgres
-4. Persist a task and an outbox event in Postgres
+4. Persist the entry task and an outbox event in Postgres
 5. Dispatch the task through Redis Streams
-6. Let a worker process it
-7. Persist the final result back to Postgres
+6. Let a worker process it and record task attempts durably
+7. Retry failed work later by storing `next_run_at` and redispatching through the outbox
+8. Enqueue the next task when a task succeeds in a linear workflow
+9. Persist the final workflow result back to Postgres when the terminal task completes
 
 That is enough to validate the shape of the system.
 
-What it does not prove yet is the full workflow-engine problem space: retries, delayed tasks, recovery, DLQ handling, richer graph execution, and stronger idempotency boundaries.
+What it does not prove yet is the full workflow-engine problem space: DLQ handling, richer graph execution, stronger crash recovery, and harder idempotency boundaries under broader concurrency patterns.
 
 ## What is intentionally not implemented yet
 
-- Retry engine with backoff
-- Delayed task scheduler
 - Dead-letter queue routing
 - Cancellation and timeouts
 - Workflow versioning
 - Recovery of stuck/pending Redis consumer-group messages
+- Richer graph execution beyond linear `next_task`
 - Advanced dashboard features
 - AI workflow generation and failure summarization
 
@@ -145,14 +147,14 @@ The current vertical slice does exactly this:
 1. Create a workflow definition with `POST /api/workflows`
 2. Trigger an execution with `POST /api/executions`
 3. Persist a workflow execution row
-4. Persist one sample task instance
+4. Persist the entry task instance
 5. Persist an outbox event in Postgres
 6. Publish that event to Redis Streams
 7. Consume it in the worker
 8. Run a mock handler
-9. Persist task success and execution success back into Postgres
-
-Right now, each execution creates one hardcoded sample task. It keeps the first pass simple and makes the execution flow easy to inspect before I add definition-driven task creation.
+9. Retry later on failure by storing `next_run_at` and re-enqueueing through the outbox
+10. On success, enqueue the next task in a linear workflow if `next_task` is configured
+11. Persist execution success only after the terminal task completes
 
 ## Current snapshot
 
@@ -162,8 +164,8 @@ As of the current version:
 - `8` total Docker Compose services in the local stack
 - `5` core workflow tables
 - `7` backend HTTP endpoints across API and worker
-- `1` fully verified end-to-end happy path
-- `~0.9s` observed local trigger-to-completion latency in one verified run
+- `1` verified multi-step workflow chain with two task instances and durable attempts
+- `~2s` observed local two-step trigger-to-completion latency in one verified run
 
 I keep these numbers here mainly to make the current scope explicit.
 

@@ -20,20 +20,24 @@ Completed foundation:
 - sample handler processing
 - dashboard-based manual validation
 - starter metrics and tracing bootstrap
+- definition-driven entry task creation
+- execution snapshots with task attempts
+- retry policy, backoff scheduling, and outbox-based retry redispatch
+- linear task chaining through `next_task`
 
 Still to build:
 
-- definition-driven workflow expansion
-- retries and backoff
-- delayed scheduling
 - DLQ behavior
 - crash recovery
 - stronger idempotency
+- richer graph execution beyond linear `next_task`
 - workflow versioning
 
 The phases below describe that remaining work in the order I plan to tackle it.
 
 ## Phase 1: Replace hardcoded task creation with definition parsing
+
+Status: completed
 
 ### Build
 
@@ -70,6 +74,8 @@ This is the first real step from “demo pipeline” to “workflow engine.” I
 
 ## Phase 2: Add execution-read APIs that expose attempts and timelines
 
+Status: completed
+
 ### Build
 
 Expand the read side so the API can return task attempts, timestamps, and failure details for an execution.
@@ -102,6 +108,8 @@ Good engines are debuggable. This phase is where observability starts to show up
 - A richer execution snapshot endpoint is enough for now
 
 ## Phase 3: Implement retry policy with backoff
+
+Status: completed
 
 ### Build
 
@@ -138,6 +146,8 @@ Retries are where workflow engines become operationally useful, and where state-
 - Persist the next eligible run time rather than sleeping in the worker
 
 ## Phase 4: Build a delayed-task scheduler
+
+Status: completed
 
 ### Build
 

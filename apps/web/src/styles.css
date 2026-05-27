@@ -139,6 +139,37 @@ code {
   padding: 0.5rem 0.8rem;
 }
 
+.state-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.state-running {
+  background: rgba(0, 114, 206, 0.12);
+  color: #0b5cad;
+}
+
+.state-pending {
+  background: rgba(230, 178, 126, 0.24);
+  color: #8a4b24;
+}
+
+.state-succeeded {
+  background: rgba(47, 128, 87, 0.14);
+  color: #1f6b47;
+}
+
+.state-failed {
+  background: rgba(183, 28, 28, 0.12);
+  color: #8c1c13;
+}
+
 .snapshot,
 .task-list {
   display: grid;

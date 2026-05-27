@@ -26,17 +26,17 @@ What exists today:
 - a minimal dashboard
 - a Postgres-backed workflow state model
 - Redis Streams dispatch
-- an outbox-based happy path
-- a verified sample task execution flow
+- an outbox-based dispatch path for both first-run tasks and retries
+- retry scheduling backed by `next_run_at`
+- linear task chaining through `next_task`
+- a verified multi-step sample execution flow
 
 What does not exist yet:
 
-- definition-driven graph execution
-- retry orchestration
-- delayed scheduling
 - DLQ routing
 - strong crash recovery
 - workflow versioning
+- branching or parallel workflow execution
 
 That distinction matters because the project is being built in stages, and the architecture is designed to support that growth cleanly.
 
@@ -149,6 +149,7 @@ Why it exists:
 - Holds lifecycle state
 - Stores execution input and eventual output/error
 - Becomes the parent of all task instances
+- Stays `running` while a workflow advances from one task to the next
 
 ### `task_instances`
 
@@ -160,6 +161,7 @@ Why it exists:
 - Holds handler routing metadata
 - Gives you a place for scheduling fields like `next_run_at`
 - Carries an `idempotency_key` for future hardening
+- Represents both retry wait state and linear workflow progression
 
 ### `task_attempts`
 
@@ -169,7 +171,7 @@ Why it exists:
 
 - Preserves execution history
 - Makes retries observable and auditable
-- Provides a future seam for backoff and DLQ behavior
+- Provides the retry and progression history that feeds the execution snapshot
 
 ### `outbox_events`
 
@@ -213,10 +215,11 @@ sequenceDiagram
 
 ## Current implementation boundaries
 
-The current vertical slice is intentionally narrower than the final design:
+The current vertical slice is still intentionally smaller than a full graph engine:
 
-- one workflow execution creates one hardcoded sample task
-- one task produces one outbox event
+- one workflow execution starts from one entry task
+- one successful task can enqueue one `next_task`
+- one retryable failure can schedule later redispatch through the outbox
 - one outbox event becomes one Redis dispatch
 - the sample handler is used to validate the durability path, not business complexity
 

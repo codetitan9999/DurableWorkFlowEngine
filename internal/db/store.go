@@ -567,6 +567,8 @@ func (s *Store) FailTaskAttempt(ctx context.Context, taskID, attemptID, errorTex
 		UPDATE task_instances
 		SET status = $2,
 			last_error_text = $3,
+			next_run_at = NULL,
+			completed_at = NOW(),
 			updated_at = NOW()
 		WHERE id = $1
 	`, taskID, domain.TaskStatusFailed, truncate(errorText, 1000)); err != nil {
@@ -577,6 +579,7 @@ func (s *Store) FailTaskAttempt(ctx context.Context, taskID, attemptID, errorTex
 		UPDATE workflow_executions
 		SET status = $2,
 			error_text = $3,
+			completed_at = NOW(),
 			updated_at = NOW()
 		WHERE id = $1
 	`, executionID, domain.ExecutionStatusFailed, truncate(errorText, 1000)); err != nil {

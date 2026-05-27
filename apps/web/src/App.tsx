@@ -71,7 +71,7 @@ const defaultExecutionInput = `{
 
 function formatTimestamp(value?: string) {
   if (!value) {
-    return "Not finished yet";
+    return "Not available";
   }
 
   const date = new Date(value);
@@ -80,6 +80,32 @@ function formatTimestamp(value?: string) {
   }
 
   return date.toLocaleString();
+}
+
+function getExecutionStateLabel(snapshot: ExecutionSnapshot["execution"]) {
+  if (snapshot.status === "failed") {
+    return "Failed permanently";
+  }
+  if (snapshot.status === "succeeded") {
+    return "Completed";
+  }
+  return "In progress";
+}
+
+function getTaskStateLabel(task: TaskInstance) {
+  if (task.status === "failed") {
+    return "Failed permanently";
+  }
+  if (task.status === "succeeded") {
+    return "Completed";
+  }
+  if (task.status === "running") {
+    return "Running now";
+  }
+  if (task.status === "pending" && task.next_run_at) {
+    return "Pending retry";
+  }
+  return "Queued";
 }
 
 function tryParseJSON(value: string): { value?: unknown; error?: string } {
@@ -325,12 +351,18 @@ export default function App() {
                 <strong>{snapshot.execution.status}</strong>
               </div>
               <code>{snapshot.execution.id}</code>
+              <div className={`state-pill state-${snapshot.execution.status}`}>
+                {getExecutionStateLabel(snapshot.execution)}
+              </div>
               <p className="attempt-meta">
                 Started: {formatTimestamp(snapshot.execution.started_at)}
               </p>
               <p className="attempt-meta">
                 Completed: {formatTimestamp(snapshot.execution.completed_at)}
               </p>
+              {snapshot.execution.error ? (
+                <div className="attempt-error">{snapshot.execution.error}</div>
+              ) : null}
               <div className="task-list">
                 {snapshot.tasks.map((taskSnapshot, index) => {
                   const attempts = taskSnapshot.attempts ?? [];
@@ -342,6 +374,9 @@ export default function App() {
                           Step {index + 1}: {taskSnapshot.task.task_name}
                         </span>
                         <strong>{taskSnapshot.task.status}</strong>
+                      </div>
+                      <div className={`state-pill state-${taskSnapshot.task.status}`}>
+                        {getTaskStateLabel(taskSnapshot.task)}
                       </div>
                       <code>{taskSnapshot.task.handler_key}</code>
                       <p>Attempts: {taskSnapshot.task.attempts_total}</p>
