@@ -128,6 +128,20 @@ The dashboard exists to make the system inspectable. It can:
 
 It is intentionally a lightweight operator-facing shell, not a full product UI.
 
+The dashboard is built around four concrete operator states:
+
+- an overview state for workflow creation and execution triggering
+- a success state that shows task chaining and attempt history
+- a dead-letter state that exposes terminal failures without raw database access
+- a replay state that shows recovery re-entering the same durable execution path
+
+Reference screenshots:
+
+- [Overview](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/docs/screenshots/01-overview.jpeg)
+- [Successful execution](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/docs/screenshots/02-successful-execution.jpeg)
+- [Dead-letter handling](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/docs/screenshots/03-dead-letter-panel.jpeg)
+- [Replay flow](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/docs/screenshots/04-replay-response.jpeg)
+
 ### Outbox publisher
 
 `internal/outbox`

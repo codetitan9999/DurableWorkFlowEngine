@@ -160,6 +160,39 @@ That is one of the most important correctness guarantees in the project.
 - `outbox_events`
 - `idempotency_records`
 
+## Dashboard walkthrough
+
+The dashboard is intentionally small, but each panel maps directly to a core part of the system:
+
+- workflow definition creation
+- execution triggering
+- execution snapshot inspection
+- dead-letter visibility and replay
+
+### 1. Overview
+
+The overview screen shows the full operator surface in its empty state: create a workflow, trigger an execution, inspect the latest API response, and monitor dead-lettered tasks from one place.
+
+![Dashboard overview](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/docs/screenshots/01-overview.jpeg)
+
+### 2. Successful multi-step execution
+
+This state shows a completed linear workflow. The execution snapshot captures both task instances, their attempts, timestamps, and final `succeeded` status while the response panel shows the latest API payload that drove the UI.
+
+![Successful execution snapshot](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/docs/screenshots/02-successful-execution.jpeg)
+
+### 3. Dead-letter handling
+
+This state shows a workflow that failed terminally because its handler was intentionally missing. The execution snapshot shows the task as `dead_lettered`, preserves attempt history, and surfaces the terminal error without needing to inspect the database directly.
+
+![Dead-letter handling](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/docs/screenshots/03-dead-letter-panel.jpeg)
+
+### 4. Replay flow
+
+Replay takes a dead-lettered task, moves it back into the durable dispatch path, and shows the updated state in the same UI. This is useful for recovery demos because replay is not a special one-off command; it reuses the same outbox-driven execution machinery as the original run.
+
+![Replay flow](/Users/sumanth/Desktop/CodexApps/DurableWorkFlow/docs/screenshots/04-replay-response.jpeg)
+
 ## Repository map
 
 ```text
