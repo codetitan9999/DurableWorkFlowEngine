@@ -227,6 +227,35 @@ func (s *Store) GetExecutionSnapshot(ctx context.Context, executionID string) (d
 	}, nil
 }
 
+func (s *Store) ListDeadLetteredTasks(ctx context.Context, limit int) ([]domain.TaskInstance, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, workflow_execution_id, task_name, handler_key, status, input_json, output_json, next_run_at, last_error_text, attempts_total, idempotency_key, dispatched_at, completed_at, created_at, updated_at
+		FROM task_instances
+		WHERE status = $1
+		ORDER BY updated_at DESC
+		LIMIT $2
+	`, domain.TaskStatusDeadLettered, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tasks []domain.TaskInstance
+	for rows.Next() {
+		task, err := scanTaskInstance(rows)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, task)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return tasks, nil
+}
+
 func (s *Store) StartTaskAttempt(ctx context.Context, taskID string) (domain.TaskInstance, domain.TaskAttempt, bool, error) {
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -571,7 +600,7 @@ func (s *Store) FailTaskAttempt(ctx context.Context, taskID, attemptID, errorTex
 			completed_at = NOW(),
 			updated_at = NOW()
 		WHERE id = $1
-	`, taskID, domain.TaskStatusFailed, truncate(errorText, 1000)); err != nil {
+	`, taskID, domain.TaskStatusDeadLettered, truncate(errorText, 1000)); err != nil {
 		return err
 	}
 

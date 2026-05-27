@@ -170,6 +170,11 @@ code {
   color: #8c1c13;
 }
 
+.state-dead_lettered {
+  background: rgba(120, 53, 15, 0.12);
+  color: #92400e;
+}
+
 .snapshot,
 .task-list {
   display: grid;

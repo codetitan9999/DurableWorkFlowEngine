@@ -12,10 +12,11 @@ const (
 	ExecutionStatusSucceeded = "succeeded"
 	ExecutionStatusFailed    = "failed"
 
-	TaskStatusPending   = "pending"
-	TaskStatusRunning   = "running"
-	TaskStatusSucceeded = "succeeded"
-	TaskStatusFailed    = "failed"
+	TaskStatusPending      = "pending"
+	TaskStatusRunning      = "running"
+	TaskStatusSucceeded    = "succeeded"
+	TaskStatusFailed       = "failed"
+	TaskStatusDeadLettered = "dead_lettered"
 
 	TaskAttemptStatusRunning   = "running"
 	TaskAttemptStatusSucceeded = "succeeded"

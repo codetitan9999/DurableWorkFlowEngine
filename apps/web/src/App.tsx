@@ -93,6 +93,9 @@ function getExecutionStateLabel(snapshot: ExecutionSnapshot["execution"]) {
 }
 
 function getTaskStateLabel(task: TaskInstance) {
+  if (task.status === "dead_lettered") {
+    return "Needs attention";
+  }
   if (task.status === "failed") {
     return "Failed permanently";
   }
