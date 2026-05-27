@@ -25,6 +25,8 @@ DurableFlow currently supports:
 - dead-lettered task handling with list and replay support
 - Redis consumer-group recovery for stale pending messages
 - handler-level idempotency backed by persisted reservations and stored responses
+- a containerized multi-service local stack with Docker Compose
+- focused tests around orchestration, handler idempotency, worker failure paths, and Redis recovery logic
 
 In practical terms, a workflow can be created, triggered, dispatched asynchronously, retried safely, recovered after failure, replayed after dead-lettering, and inspected end to end.
 
@@ -151,6 +153,8 @@ That is one of the most important correctness guarantees in the project.
 - Prometheus
 - Grafana
 
+The stack is meant to run as a reproducible local distributed system, not as a set of disconnected code samples. Docker Compose brings up the API, worker, web dashboard, Postgres, Redis, and observability services together so retry behavior, replay, crash recovery, and inspection can be exercised end to end.
+
 ### Core persistence model
 
 - `workflow_definitions`
@@ -244,6 +248,21 @@ Optional for running services outside Docker:
 cp .env.example .env
 docker compose up --build
 ```
+
+## Verification
+
+The codebase is built to be runnable and checkable, not just readable:
+
+- backend behavior is validated with `go test ./...`
+- the dashboard is validated with a production build via `npm --prefix apps/web run build`
+- the local stack includes OpenTelemetry, Prometheus, and Grafana so service behavior can be inspected in a realistic multi-service setup
+
+The current tests focus on the areas where correctness matters most:
+
+- workflow orchestration helpers
+- worker success, retry, and dead-letter branches
+- handler-level idempotency behavior
+- Redis consumer-group reclaim and queue decoding helpers
 
 ### Local endpoints
 
