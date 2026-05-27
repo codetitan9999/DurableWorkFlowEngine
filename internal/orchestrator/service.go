@@ -28,6 +28,11 @@ type TriggerExecutionRequest struct {
 	Input                json.RawMessage
 }
 
+const (
+	defaultDeadLetterTaskLimit = 100
+	maxDeadLetterTaskLimit     = 500
+)
+
 func NewService(store *db.Store, logger *slog.Logger) *Service {
 	return &Service{
 		store:  store,
@@ -172,6 +177,7 @@ func FindTaskSpecByName(workflowSpec domain.WorkflowDefinitionSpec, taskName str
 
 	return domain.WorkflowTaskSpec{}, errors.New("task not found in workflow definition: " + taskName)
 }
+
 func FindNextTaskSpec(workflowSpec domain.WorkflowDefinitionSpec, currentTaskName string) (domain.WorkflowTaskSpec, bool, error) {
 	taskSpec, err := FindTaskSpecByName(workflowSpec, currentTaskName)
 	if err != nil {
@@ -185,4 +191,36 @@ func FindNextTaskSpec(workflowSpec domain.WorkflowDefinitionSpec, currentTaskNam
 		return domain.WorkflowTaskSpec{}, false, fmt.Errorf("invalid next_task reference: %w", err)
 	}
 	return nextTaskSpec, true, nil
+}
+
+func (s *Service) GetDeadLetteredTasks(ctx context.Context, limit int) ([]domain.TaskInstance, error) {
+	return s.store.ListDeadLetteredTasks(ctx, normalizeDeadLetterTaskLimit(limit))
+}
+
+func (s *Service) ReplayDeadLetteredTask(ctx context.Context, taskID string) (domain.TaskInstance, error) {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return domain.TaskInstance{}, errors.New("task id is required")
+	}
+
+	task, err := s.store.ReplayDeadLetteredTask(ctx, taskID)
+	if err != nil {
+		if db.IsNotFound(err) || db.IsTaskNotReplayable(err) {
+			return domain.TaskInstance{}, err
+		}
+		return domain.TaskInstance{}, fmt.Errorf("replay dead-lettered task: %w", err)
+	}
+
+	s.logger.InfoContext(ctx, "replayed dead-lettered task", "task_id", task.ID, "execution_id", task.WorkflowExecutionID)
+	return task, nil
+}
+
+func normalizeDeadLetterTaskLimit(limit int) int {
+	if limit <= 0 {
+		return defaultDeadLetterTaskLimit
+	}
+	if limit > maxDeadLetterTaskLimit {
+		return maxDeadLetterTaskLimit
+	}
+	return limit
 }

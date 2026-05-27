@@ -9,6 +9,7 @@ type WorkflowDefinition = {
 
 type TaskInstance = {
   id: string;
+  workflow_execution_id: string;
   task_name: string;
   handler_key: string;
   status: string;
@@ -131,6 +132,8 @@ export default function App() {
   const [workflow, setWorkflow] = useState<WorkflowDefinition | null>(null);
   const [executionId, setExecutionId] = useState("");
   const [snapshot, setSnapshot] = useState<ExecutionSnapshot | null>(null);
+  const [deadLetterTasks, setDeadLetterTasks] = useState<TaskInstance[]>([]);
+  const [deadLetterError, setDeadLetterError] = useState("");
   const [responseText, setResponseText] = useState("");
   const [errorText, setErrorText] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
@@ -148,6 +151,25 @@ export default function App() {
     loading !== null || workflowNameError !== "" || definitionError !== "";
   const triggerExecutionDisabled =
     loading !== null || workflow === null || inputError !== "";
+
+  async function loadDeadLetterTasks() {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/dead-letter-tasks?limit=10`);
+      const data = (await response.json()) as TaskInstance[] | { error?: string };
+      if (!response.ok) {
+        throw new Error(
+          "error" in data && data.error ? data.error : "Failed to load dead-lettered tasks"
+        );
+      }
+
+      setDeadLetterTasks(data as TaskInstance[]);
+      setDeadLetterError("");
+    } catch (error) {
+      setDeadLetterError(
+        error instanceof Error ? error.message : "Failed to load dead-lettered tasks"
+      );
+    }
+  }
 
   useEffect(() => {
     if (!executionId) {
@@ -183,6 +205,51 @@ export default function App() {
       window.clearInterval(intervalId);
     };
   }, [executionId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshDeadLetterTasks = async () => {
+      await loadDeadLetterTasks();
+    };
+
+    void refreshDeadLetterTasks();
+    const intervalId = window.setInterval(() => {
+      if (!cancelled) {
+        void refreshDeadLetterTasks();
+      }
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  async function replayDeadLetteredTask(task: TaskInstance) {
+    setLoading(`replay-${task.id}`);
+    setErrorText("");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/tasks/${task.id}/replay`, {
+        method: "POST"
+      });
+      const data = (await response.json()) as TaskInstance | { error?: string };
+      if (!response.ok) {
+        throw new Error("error" in data && data.error ? data.error : "Failed to replay task");
+      }
+
+      const replayedTask = data as TaskInstance;
+      setExecutionId(replayedTask.workflow_execution_id);
+      setSnapshot(null);
+      setResponseText(JSON.stringify(replayedTask, null, 2));
+      await loadDeadLetterTasks();
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : "Unknown error");
+    } finally {
+      setLoading(null);
+    }
+  }
 
   async function createWorkflow() {
     if (workflowNameError) {
@@ -432,6 +499,47 @@ export default function App() {
           <h2>Latest response</h2>
           {errorText ? <div className="error-box">{errorText}</div> : null}
           <pre>{responseText || "Responses will appear here."}</pre>
+        </section>
+
+        <section className="panel">
+          <h2>4. Needs attention</h2>
+          <p className="muted">
+            Dead-lettered tasks are listed here so you can inspect permanently failed
+            work without digging through raw tables.
+          </p>
+          {deadLetterError ? <div className="error-box">{deadLetterError}</div> : null}
+          {deadLetterTasks.length > 0 ? (
+            <div className="task-list">
+              {deadLetterTasks.map((task) => (
+                <div className="task-card attention-card" key={task.id}>
+                  <div className="snapshot-header">
+                    <span>{task.task_name}</span>
+                    <strong>{task.status}</strong>
+                  </div>
+                  <div className={`state-pill state-${task.status}`}>
+                    {getTaskStateLabel(task)}
+                  </div>
+                  <code>{task.handler_key}</code>
+                  <p className="attempt-meta">Execution: {task.workflow_execution_id}</p>
+                  <p className="attempt-meta">Attempts: {task.attempts_total}</p>
+                  <p className="attempt-meta">Created: {formatTimestamp(task.created_at)}</p>
+                  <p className="attempt-meta">
+                    Failed at: {formatTimestamp(task.completed_at)}
+                  </p>
+                  {task.last_error ? <div className="attempt-error">{task.last_error}</div> : null}
+                  <button
+                    className="secondary-button"
+                    onClick={() => void replayDeadLetteredTask(task)}
+                    disabled={loading !== null}
+                  >
+                    {loading === `replay-${task.id}` ? "Replaying..." : "Replay task"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="empty-state">No dead-lettered tasks right now.</p>
+          )}
         </section>
       </main>
     </div>

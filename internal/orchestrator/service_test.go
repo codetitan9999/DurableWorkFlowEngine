@@ -157,3 +157,25 @@ func TestFindNextTaskSpecReturnsFalseWhenTaskEndsWorkflow(t *testing.T) {
 		t.Fatal("expected no next task for terminal task")
 	}
 }
+
+func TestNormalizeDeadLetterTaskLimit(t *testing.T) {
+	tests := []struct {
+		name  string
+		input int
+		want  int
+	}{
+		{name: "defaults missing or invalid values", input: 0, want: defaultDeadLetterTaskLimit},
+		{name: "defaults negative values", input: -1, want: defaultDeadLetterTaskLimit},
+		{name: "keeps in-range values", input: 25, want: 25},
+		{name: "caps overly large values", input: maxDeadLetterTaskLimit + 1, want: maxDeadLetterTaskLimit},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeDeadLetterTaskLimit(tt.input)
+			if got != tt.want {
+				t.Fatalf("expected %d, got %d", tt.want, got)
+			}
+		})
+	}
+}

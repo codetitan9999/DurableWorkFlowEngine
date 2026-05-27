@@ -21,6 +21,7 @@ What works today:
 - Retry-aware task execution with durable `next_run_at` scheduling and outbox-based redispatch
 - Linear multi-step workflow chaining with one task able to enqueue the next task
 - Execution snapshots that expose task attempts, retry state, and progression through the workflow
+- Postgres-backed dead-lettered task handling with list and replay support
 
 I want the repo to reflect the current state of the build clearly, with the foundation in place and the next phases mapped out.
 
@@ -74,14 +75,15 @@ Today, the repo proves that this flow works:
 7. Retry failed work later by storing `next_run_at` and redispatching through the outbox
 8. Enqueue the next task when a task succeeds in a linear workflow
 9. Persist the final workflow result back to Postgres when the terminal task completes
+10. Surface dead-lettered tasks and replay them through the same outbox path when manual recovery is needed
 
 That is enough to validate the shape of the system.
 
-What it does not prove yet is the full workflow-engine problem space: DLQ handling, richer graph execution, stronger crash recovery, and harder idempotency boundaries under broader concurrency patterns.
+What it does not prove yet is the full workflow-engine problem space: richer graph execution, stronger crash recovery, and harder idempotency boundaries under broader concurrency patterns.
 
 ## What is intentionally not implemented yet
 
-- Dead-letter queue routing
+- Separate DLQ transport or richer admin tooling beyond the current Postgres-backed dead-letter flow
 - Cancellation and timeouts
 - Workflow versioning
 - Recovery of stuck/pending Redis consumer-group messages
@@ -244,6 +246,18 @@ Fetch execution state:
 curl http://localhost:8080/api/executions/<execution-id>
 ```
 
+List dead-lettered tasks:
+
+```bash
+curl http://localhost:8080/api/dead-letter-tasks?limit=10
+```
+
+Replay one dead-lettered task:
+
+```bash
+curl -X POST http://localhost:8080/api/tasks/<task-id>/replay
+```
+
 ## Current design choices
 
 - Postgres owns workflow state, task state, attempts, and dispatch intent.
@@ -256,11 +270,8 @@ curl http://localhost:8080/api/executions/<execution-id>
 
 The next major milestones are:
 
-- definition-driven task creation
-- richer execution inspection APIs
-- retry policy with backoff
-- delayed task scheduling
-- DLQ behavior
+- stronger runtime orchestration tests
+- broader graph execution beyond linear `next_task`
 - worker crash recovery
 - stronger idempotency guarantees
 

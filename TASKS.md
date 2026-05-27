@@ -24,10 +24,10 @@ Completed foundation:
 - execution snapshots with task attempts
 - retry policy, backoff scheduling, and outbox-based retry redispatch
 - linear task chaining through `next_task`
+- Postgres-backed dead-lettered task listing and replay
 
 Still to build:
 
-- DLQ behavior
 - crash recovery
 - stronger idempotency
 - richer graph execution beyond linear `next_task`
@@ -183,6 +183,8 @@ This phase forces you to think like a durable system: time-based state changes s
 
 ## Phase 5: Add dead-letter queue behavior
 
+Status: completed
+
 ### Build
 
 Introduce terminal routing for tasks that exceed retry policy or fail with non-retriable errors.
@@ -208,6 +210,7 @@ DLQs are part of making failure modes explicit and operable instead of invisible
 - Terminally failed tasks are clearly marked
 - DLQ state is queryable from Postgres
 - You can distinguish retry exhaustion from hard validation failures
+- A dead-lettered task can be replayed manually through the same outbox path
 
 ### Optional hints
 

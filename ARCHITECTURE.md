@@ -30,10 +30,11 @@ What exists today:
 - retry scheduling backed by `next_run_at`
 - linear task chaining through `next_task`
 - a verified multi-step sample execution flow
+- a Postgres-backed dead-lettered task flow with list and replay support
 
 What does not exist yet:
 
-- DLQ routing
+- a separate DLQ transport or richer operator tooling around replay
 - strong crash recovery
 - workflow versioning
 - branching or parallel workflow execution
@@ -79,8 +80,10 @@ Responsibilities:
 - Create a workflow definition
 - Trigger an execution
 - Poll the current execution snapshot
+- Surface dead-lettered tasks that need attention
+- Replay one dead-lettered task back into the outbox flow
 
-The web app is still just a thin validation UI, not a real dashboard yet.
+The web app is still a lightweight validation dashboard, not a full operator console yet.
 
 ### `internal/db`
 
@@ -162,6 +165,7 @@ Why it exists:
 - Gives you a place for scheduling fields like `next_run_at`
 - Carries an `idempotency_key` for future hardening
 - Represents both retry wait state and linear workflow progression
+- Holds the `dead_lettered` terminal state for tasks that need manual attention
 
 ### `task_attempts`
 
@@ -261,13 +265,11 @@ That separation keeps the code approachable while still resembling a real servic
 These are not missing by accident. They are the next learning steps.
 
 - Workflow definitions are not yet expanded into real task graphs
-- Retry scheduling is not implemented
-- Delayed tasks are not dispatched from `next_run_at`
 - Pending consumer-group messages are not reclaimed after worker crashes
-- DLQ behavior is not implemented
 - Workflow versioning is not implemented
 - Cancellation is not implemented
 - Handler-level idempotency is only lightly modeled today
+- Replay behavior is basic and does not yet include audit-specific operator tooling
 
 ## Extension points
 

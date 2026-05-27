@@ -22,6 +22,8 @@ type Store struct {
 	pool *pgxpool.Pool
 }
 
+var errTaskNotReplayable = errors.New("task is not dead-lettered")
+
 func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
@@ -254,6 +256,85 @@ func (s *Store) ListDeadLetteredTasks(ctx context.Context, limit int) ([]domain.
 	}
 
 	return tasks, nil
+}
+
+func (s *Store) ReplayDeadLetteredTask(ctx context.Context, taskID string) (domain.TaskInstance, error) {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return domain.TaskInstance{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	taskRow := tx.QueryRow(ctx, `
+		SELECT id, workflow_execution_id, task_name, handler_key, status, input_json, output_json, next_run_at, last_error_text, attempts_total, idempotency_key, dispatched_at, completed_at, created_at, updated_at
+		FROM task_instances
+		WHERE id = $1
+		FOR UPDATE
+	`, taskID)
+
+	task, err := scanTaskInstance(taskRow)
+	if err != nil {
+		return domain.TaskInstance{}, err
+	}
+
+	if task.Status != domain.TaskStatusDeadLettered {
+		return domain.TaskInstance{}, errTaskNotReplayable
+	}
+
+	updatedTaskRow := tx.QueryRow(ctx, `
+		UPDATE task_instances
+		SET status = $2,
+			output_json = NULL,
+			next_run_at = NULL,
+			last_error_text = NULL,
+			completed_at = NULL,
+			updated_at = NOW()
+		WHERE id = $1
+		RETURNING id, workflow_execution_id, task_name, handler_key, status, input_json, output_json, next_run_at, last_error_text, attempts_total, idempotency_key, dispatched_at, completed_at, created_at, updated_at
+	`, task.ID, domain.TaskStatusPending)
+	updatedTask, err := scanTaskInstance(updatedTaskRow)
+	if err != nil {
+		return domain.TaskInstance{}, err
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE workflow_executions
+		SET status = $2,
+			error_text = NULL,
+			completed_at = NULL,
+			updated_at = NOW()
+		WHERE id = $1
+	`, task.WorkflowExecutionID, domain.ExecutionStatusRunning); err != nil {
+		return domain.TaskInstance{}, err
+	}
+
+	dispatchPayload, err := json.Marshal(domain.DispatchTaskPayload{
+		TaskID:      updatedTask.ID,
+		ExecutionID: updatedTask.WorkflowExecutionID,
+		HandlerKey:  updatedTask.HandlerKey,
+	})
+	if err != nil {
+		return domain.TaskInstance{}, err
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO outbox_events (
+			aggregate_type,
+			aggregate_id,
+			event_type,
+			payload_json,
+			available_at
+		)
+		VALUES ($1, $2, $3, $4, NOW())
+	`, "task_instance", updatedTask.ID, "task.dispatch", dispatchPayload); err != nil {
+		return domain.TaskInstance{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.TaskInstance{}, err
+	}
+
+	return updatedTask, nil
 }
 
 func (s *Store) StartTaskAttempt(ctx context.Context, taskID string) (domain.TaskInstance, domain.TaskAttempt, bool, error) {
@@ -805,4 +886,8 @@ func IsNotFound(err error) bool {
 func IsUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+func IsTaskNotReplayable(err error) bool {
+	return errors.Is(err, errTaskNotReplayable)
 }

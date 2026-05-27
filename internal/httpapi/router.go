@@ -3,8 +3,10 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"durableflow/internal/db"
@@ -39,6 +41,9 @@ func NewRouter(logger *slog.Logger, service *orchestrator.Service, healthFn func
 	mux.HandleFunc("/api/workflows", router.handleWorkflows)
 	mux.HandleFunc("/api/executions", router.handleExecutions)
 	mux.HandleFunc("/api/executions/", router.handleExecutionSnapshot)
+	mux.HandleFunc("/api/tasks/", router.handleTaskActions)
+	mux.HandleFunc("/api/dead-letter-tasks", router.handleDeadLetteredTasks)
+	mux.HandleFunc("/api/dead-lettered-tasks", router.handleDeadLetteredTasks)
 
 	return cors(mux)
 }
@@ -139,6 +144,97 @@ func (rt *Router) handleExecutionSnapshot(w http.ResponseWriter, r *http.Request
 	}
 
 	writeJSON(w, http.StatusOK, snapshot)
+}
+
+func (rt *Router) handleDeadLetteredTasks(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	limit, err := parsePositiveIntQuery(r, "limit")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+
+	tasks, err := rt.service.GetDeadLetteredTasks(r.Context(), limit)
+	if err != nil {
+		rt.logger.Error("get dead lettered tasks failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to load dead lettered tasks"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, tasks)
+}
+
+func (rt *Router) handleTaskActions(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	taskID, action, ok := parseTaskActionPath(r.URL.Path)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "task action not found"})
+		return
+	}
+
+	switch action {
+	case "replay":
+		task, err := rt.service.ReplayDeadLetteredTask(r.Context(), taskID)
+		if err != nil {
+			switch {
+			case db.IsNotFound(err):
+				writeJSON(w, http.StatusNotFound, map[string]any{"error": "task not found"})
+			case db.IsTaskNotReplayable(err):
+				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "only dead-lettered tasks can be replayed"})
+			default:
+				rt.logger.Error("replay dead lettered task failed", "task_id", taskID, "error", err)
+				writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to replay task"})
+			}
+			return
+		}
+
+		writeJSON(w, http.StatusAccepted, task)
+	default:
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "task action not found"})
+	}
+}
+
+func parsePositiveIntQuery(r *http.Request, key string) (int, error) {
+	raw := strings.TrimSpace(r.URL.Query().Get(key))
+	if raw == "" {
+		return 0, nil
+	}
+
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, errors.New(key + " must be a valid integer")
+	}
+	if value <= 0 {
+		return 0, errors.New(key + " must be greater than 0")
+	}
+
+	return value, nil
+}
+
+func parseTaskActionPath(path string) (taskID string, action string, ok bool) {
+	trimmed := strings.TrimPrefix(path, "/api/tasks/")
+	parts := strings.Split(strings.Trim(trimmed, "/"), "/")
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+		return "", "", false
+	}
+
+	return parts[0], parts[1], true
 }
 
 func cors(next http.Handler) http.Handler {

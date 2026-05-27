@@ -38,6 +38,11 @@ button:hover {
   transform: translateY(-1px);
 }
 
+.secondary-button {
+  background: rgba(20, 33, 61, 0.08);
+  color: #14213d;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.6;
@@ -185,6 +190,12 @@ code {
   padding: 1rem;
 }
 
+.attention-card {
+  border-color: rgba(146, 64, 14, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 251, 235, 0.9) 0%, rgba(255, 255, 255, 0.92) 100%);
+}
+
 .attempt-list {
   display: grid;
   gap: 0.65rem;
@@ -230,6 +241,15 @@ code {
   background: rgba(183, 28, 28, 0.1);
   color: #8c1c13;
   padding: 0.9rem 1rem;
+}
+
+.empty-state {
+  margin: 0;
+  border: 1px dashed rgba(20, 33, 61, 0.16);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.5);
+  color: rgba(20, 33, 61, 0.72);
+  padding: 1rem;
 }
 
 pre {
