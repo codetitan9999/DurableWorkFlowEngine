@@ -340,15 +340,15 @@ export default function App() {
     <div className="page-shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Durable workflow engine starter</p>
+          <p className="eyebrow">Durable workflow operations dashboard</p>
           <h1>DurableFlow</h1>
           <p className="lede">
-            This shell is intentionally small. It exists to validate the architecture, not
-            to finish the product for you.
+            Create workflow definitions, trigger executions, inspect task history, and
+            recover failed work from one place.
           </p>
         </div>
         <div className="hero-card">
-          <h2>Current vertical slice</h2>
+          <h2>What this demo covers</h2>
           <ul>
             <li>Create one workflow definition</li>
             <li>Trigger one execution</li>
@@ -393,8 +393,8 @@ export default function App() {
         <section className="panel">
           <h2>2. Trigger execution</h2>
           <p className="muted">
-            This demo now supports a simple linear workflow: one task can enqueue the next
-            task after it succeeds.
+            This workflow runs linearly: one task can enqueue the next step after it
+            succeeds.
           </p>
           <label>
             Execution input JSON
