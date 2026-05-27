@@ -29,7 +29,6 @@ Completed foundation:
 
 Still to build:
 
-- stronger idempotency
 - richer graph execution beyond linear `next_task`
 - workflow versioning
 
@@ -255,6 +254,8 @@ This is where durable systems become real. It teaches the difference between “
 
 ## Phase 7: Strengthen idempotency guarantees
 
+Status: completed
+
 ### Build
 
 Move from “best effort task-level idempotency” to explicit side-effect idempotency boundaries.
@@ -281,6 +282,8 @@ At-least-once delivery only works in practice when side effects are safe under d
 - A handler can safely resume or repeat without duplicating its side effect
 - Idempotency strategy is explicit in code and docs
 - Failure and retry paths preserve the same idempotency contract
+- A dedicated idempotency table persists in-progress reservations and completed responses
+- The same task instance can safely resume an in-progress reservation after retries or crash recovery
 
 ### Optional hints
 

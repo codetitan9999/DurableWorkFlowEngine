@@ -60,7 +60,8 @@ func main() {
 	}
 
 	registry := handlers.NewRegistry(
-		handlers.NewSampleEchoHandler(logger),
+		handlers.NewSampleEchoHandler(logger, store),
+		handlers.NewNotificationSendHandler(logger, store),
 	)
 
 	worker := orchestrator.NewWorker(store, registry, logger)

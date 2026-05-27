@@ -60,7 +60,7 @@ const defaultDefinition = `{
     },
     {
       "name": "send-confirmation",
-      "handler_key": "sample.echo"
+      "handler_key": "notifications.send"
     }
   ]
 }`;
@@ -125,7 +125,7 @@ function tryParseJSON(value: string): { value?: unknown; error?: string } {
 export default function App() {
   const [workflowName, setWorkflowName] = useState("demo-order-approval");
   const [workflowDescription, setWorkflowDescription] = useState(
-    "Linear two-step workflow used to validate chaining, retries, and dispatch flow."
+    "Linear two-step workflow used to validate chaining, retries, dispatch flow, and handler-level idempotency."
   );
   const [definitionText, setDefinitionText] = useState(defaultDefinition);
   const [inputText, setInputText] = useState(defaultExecutionInput);

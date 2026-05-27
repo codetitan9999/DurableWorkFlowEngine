@@ -28,6 +28,10 @@ func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
+func makeTaskIdempotencyKey(executionID, taskName string) string {
+	return fmt.Sprintf("%s:%s", executionID, taskName)
+}
+
 func (s *Store) Ping(ctx context.Context) error {
 	return s.pool.Ping(ctx)
 }
@@ -110,7 +114,7 @@ func (s *Store) CreateExecutionAndTask(ctx context.Context, workflowDefinitionID
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
 		RETURNING id, workflow_execution_id, task_name, handler_key, status, input_json, output_json, next_run_at, last_error_text, attempts_total, idempotency_key, dispatched_at, completed_at, created_at, updated_at
-	`, execution.ID, taskName, handlerKey, domain.TaskStatusPending, normalizeJSON(input), fmt.Sprintf("%s:%s", execution.ID, handlerKey))
+	`, execution.ID, taskName, handlerKey, domain.TaskStatusPending, normalizeJSON(input), makeTaskIdempotencyKey(execution.ID, taskName))
 
 	task, err := scanTaskInstance(taskRow)
 	if err != nil {
@@ -356,7 +360,7 @@ func (s *Store) StartTaskAttempt(ctx context.Context, taskID string) (domain.Tas
 		return domain.TaskInstance{}, domain.TaskAttempt{}, false, err
 	}
 
-	if task.Status == domain.TaskStatusSucceeded {
+	if task.Status == domain.TaskStatusSucceeded || task.Status == domain.TaskStatusRunning {
 		return task, domain.TaskAttempt{}, true, tx.Commit(ctx)
 	}
 
@@ -513,7 +517,7 @@ func (s *Store) CompleteTaskAttemptAndEnqueueNextTask(
 		nextHandlerKey,
 		domain.TaskStatusPending,
 		payload,
-		fmt.Sprintf("%s:%s", executionID, nextTaskName),
+		makeTaskIdempotencyKey(executionID, nextTaskName),
 	).Scan(&nextTaskID); err != nil {
 		return err
 	}

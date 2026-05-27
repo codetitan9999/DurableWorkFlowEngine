@@ -23,6 +23,8 @@ What works today:
 - Execution snapshots that expose task attempts, retry state, and progression through the workflow
 - Postgres-backed dead-lettered task handling with list and replay support
 - Redis consumer-group recovery that reclaims stale pending deliveries before reading new work
+- Handler-level idempotency for the sample echo and notification send flows backed by Postgres records
+- Task-owned idempotency reservations that let the same task resume safely after retries or crash recovery
 
 I want the repo to reflect the current state of the build clearly, with the foundation in place and the next phases mapped out.
 
@@ -80,7 +82,7 @@ Today, the repo proves that this flow works:
 
 That is enough to validate the shape of the system.
 
-What it does not prove yet is the full workflow-engine problem space: richer graph execution and harder idempotency boundaries under broader concurrency patterns.
+What it does not prove yet is the full workflow-engine problem space: richer graph execution, workflow versioning, and broader idempotency policies across many real external integrations.
 
 ## What is intentionally not implemented yet
 
@@ -165,7 +167,7 @@ As of the current version:
 
 - `3` application services: `api`, `worker`, `web`
 - `8` total Docker Compose services in the local stack
-- `5` core workflow tables
+- `6` core workflow and idempotency tables
 - `7` backend HTTP endpoints across API and worker
 - `1` verified multi-step workflow chain with two task instances and durable attempts
 - `~2s` observed local two-step trigger-to-completion latency in one verified run

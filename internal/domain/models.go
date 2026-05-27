@@ -21,6 +21,9 @@ const (
 	TaskAttemptStatusRunning   = "running"
 	TaskAttemptStatusSucceeded = "succeeded"
 	TaskAttemptStatusFailed    = "failed"
+
+	IdempotencyStatusInProgress = "in_progress"
+	IdempotencyStatusCompleted  = "completed"
 )
 
 /*

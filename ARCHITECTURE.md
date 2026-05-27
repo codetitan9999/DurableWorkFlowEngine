@@ -32,6 +32,8 @@ What exists today:
 - a verified multi-step sample execution flow
 - a Postgres-backed dead-lettered task flow with list and replay support
 - Redis consumer-group recovery for stale pending deliveries
+- handler-level idempotency persisted in Postgres for the sample and notification handlers
+- task-owned idempotency reservations so retries and crash recovery can safely resume the same side effect boundary
 
 What does not exist yet:
 
@@ -123,7 +125,7 @@ Responsibilities:
 Responsibilities:
 
 - Register handler implementations by key
-- Provide the sample task handler used by the initial happy path
+- Provide the sample task and notification handlers used by the current validation flows
 
 ### `internal/telemetry`
 
@@ -188,6 +190,17 @@ Why it exists:
 - Decouples durable state changes from transient dispatch
 - Provides the base for more reliable re-dispatch and recovery later
 
+### `idempotency_records`
+
+Represents durable side-effect reservations and completed responses for handlers that need explicit idempotency.
+
+Why it exists:
+
+- Prevents the same handler side effect from running twice for the same idempotency key
+- Lets a duplicate execution reuse a stored successful response
+- Makes handler-level idempotency an explicit persisted contract instead of a convention
+- Tracks which task instance currently owns an in-progress idempotency reservation
+
 ## Current request and processing flow
 
 ```mermaid
@@ -246,7 +259,7 @@ That means:
 - Worker logic must read task state from Postgres before doing work
 - Handlers should be safe to run more than once
 
-The sample handler is intentionally simple, but the system shape assumes idempotency from the start.
+The sample and notification handlers are still intentionally simple, but they now persist idempotency records to model how a real side-effect boundary can behave under duplicate delivery.
 
 ## Why I structured it this way
 
@@ -268,7 +281,7 @@ These are not missing by accident. They are the next learning steps.
 - Workflow definitions are not yet expanded into real task graphs
 - Workflow versioning is not implemented
 - Cancellation is not implemented
-- Handler-level idempotency is only lightly modeled today
+- Handler-level idempotency is now explicit for the built-in handlers, though broader real-world integrations would still need their own policy details
 - Replay behavior is basic and does not yet include audit-specific operator tooling
 
 ## Extension points
