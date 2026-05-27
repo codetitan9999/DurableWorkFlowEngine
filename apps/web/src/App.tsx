@@ -15,6 +15,9 @@ type TaskInstance = {
   attempts_total: number;
   output?: unknown;
   last_error?: string;
+  next_run_at?: string;
+  completed_at?: string;
+  created_at?: string;
 };
 
 type TaskAttempt = {
@@ -38,6 +41,8 @@ type ExecutionSnapshot = {
     status: string;
     output?: unknown;
     error?: string;
+    started_at?: string;
+    completed_at?: string;
   };
   tasks: TaskSnapshot[];
 };
@@ -45,10 +50,15 @@ type ExecutionSnapshot = {
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
 
 const defaultDefinition = `{
-  "entry_task": "sample-task",
+  "entry_task": "validate-order",
   "tasks": [
     {
-      "name": "sample-task",
+      "name": "validate-order",
+      "handler_key": "sample.echo",
+      "next_task": "send-confirmation"
+    },
+    {
+      "name": "send-confirmation",
       "handler_key": "sample.echo"
     }
   ]
@@ -85,7 +95,7 @@ function tryParseJSON(value: string): { value?: unknown; error?: string } {
 export default function App() {
   const [workflowName, setWorkflowName] = useState("demo-order-approval");
   const [workflowDescription, setWorkflowDescription] = useState(
-    "Thin starter workflow used to validate the DurableFlow vertical slice."
+    "Linear two-step workflow used to validate chaining, retries, and dispatch flow."
   );
   const [definitionText, setDefinitionText] = useState(defaultDefinition);
   const [inputText, setInputText] = useState(defaultExecutionInput);
@@ -239,10 +249,11 @@ export default function App() {
           <ul>
             <li>Create one workflow definition</li>
             <li>Trigger one execution</li>
-            <li>Persist one task instance in Postgres</li>
-            <li>Publish via outbox to Redis Streams</li>
-            <li>Process with a mock handler</li>
-            <li>Persist success back into Postgres</li>
+            <li>Persist task instances in Postgres</li>
+            <li>Publish each step through the outbox to Redis Streams</li>
+            <li>Chain one successful task into the next task</li>
+            <li>Retry failures with durable scheduling</li>
+            <li>Finish the execution when the final task completes</li>
           </ul>
         </div>
       </header>
@@ -279,8 +290,8 @@ export default function App() {
         <section className="panel">
           <h2>2. Trigger execution</h2>
           <p className="muted">
-            The first pass always expands to one hardcoded sample task so you can implement
-            real workflow graph expansion yourself later.
+            This demo now supports a simple linear workflow: one task can enqueue the next
+            task after it succeeds.
           </p>
           <label>
             Execution input JSON
@@ -314,42 +325,61 @@ export default function App() {
                 <strong>{snapshot.execution.status}</strong>
               </div>
               <code>{snapshot.execution.id}</code>
+              <p className="attempt-meta">
+                Started: {formatTimestamp(snapshot.execution.started_at)}
+              </p>
+              <p className="attempt-meta">
+                Completed: {formatTimestamp(snapshot.execution.completed_at)}
+              </p>
               <div className="task-list">
-                {snapshot.tasks.map((taskSnapshot) => {
+                {snapshot.tasks.map((taskSnapshot, index) => {
                   const attempts = taskSnapshot.attempts ?? [];
 
                   return (
                     <div className="task-card" key={taskSnapshot.task.id}>
-                    <div className="snapshot-header">
-                      <span>{taskSnapshot.task.task_name}</span>
-                      <strong>{taskSnapshot.task.status}</strong>
-                    </div>
-                    <code>{taskSnapshot.task.handler_key}</code>
-                    <p>Attempts: {taskSnapshot.task.attempts_total}</p>
-                    {taskSnapshot.task.last_error ? (
-                      <div className="attempt-error">{taskSnapshot.task.last_error}</div>
-                    ) : null}
-                    {attempts.length > 0 && (
-                      <div className="attempt-list">
-                        {attempts.map((attempt) => (
-                          <div className="attempt-card" key={attempt.id}>
-                            <div className="snapshot-header">
-                              <span>Attempt {attempt.attempt_number}</span>
-                              <strong>{attempt.status}</strong>
-                            </div>
-                            <p className="attempt-meta">
-                              Started: {formatTimestamp(attempt.started_at)}
-                            </p>
-                            <p className="attempt-meta">
-                              Finished: {formatTimestamp(attempt.finished_at)}
-                            </p>
-                            {attempt.error ? (
-                              <div className="attempt-error">{attempt.error}</div>
-                            ) : null}
-                          </div>
-                        ))}
+                      <div className="snapshot-header">
+                        <span>
+                          Step {index + 1}: {taskSnapshot.task.task_name}
+                        </span>
+                        <strong>{taskSnapshot.task.status}</strong>
                       </div>
-                    )}
+                      <code>{taskSnapshot.task.handler_key}</code>
+                      <p>Attempts: {taskSnapshot.task.attempts_total}</p>
+                      <p className="attempt-meta">
+                        Created: {formatTimestamp(taskSnapshot.task.created_at)}
+                      </p>
+                      <p className="attempt-meta">
+                        Completed: {formatTimestamp(taskSnapshot.task.completed_at)}
+                      </p>
+                      {taskSnapshot.task.next_run_at ? (
+                        <p className="attempt-meta">
+                          Retry due: {formatTimestamp(taskSnapshot.task.next_run_at)}
+                        </p>
+                      ) : null}
+                      {taskSnapshot.task.last_error ? (
+                        <div className="attempt-error">{taskSnapshot.task.last_error}</div>
+                      ) : null}
+                      {attempts.length > 0 && (
+                        <div className="attempt-list">
+                          {attempts.map((attempt) => (
+                            <div className="attempt-card" key={attempt.id}>
+                              <div className="snapshot-header">
+                                <span>Attempt {attempt.attempt_number}</span>
+                                <strong>{attempt.status}</strong>
+                              </div>
+                              <p className="attempt-meta">
+                                Started: {formatTimestamp(attempt.started_at)}
+                              </p>
+                              <p className="attempt-meta">
+                                Finished: {formatTimestamp(attempt.finished_at)}
+                              </p>
+                              {attempt.error ? (
+                                <div className="attempt-error">{attempt.error}</div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

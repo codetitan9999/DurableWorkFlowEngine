@@ -337,6 +337,101 @@ func (s *Store) CompleteTaskAttempt(ctx context.Context, taskID, attemptID strin
 
 	return tx.Commit(ctx)
 }
+func (s *Store) CompleteTaskAttemptAndEnqueueNextTask(
+	ctx context.Context,
+	taskID string,
+	attemptID string,
+	nextTaskName string,
+	nextHandlerKey string,
+	output json.RawMessage,
+) error {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var executionID string
+	if err := tx.QueryRow(
+		ctx,
+		`SELECT workflow_execution_id FROM task_instances WHERE id = $1 FOR UPDATE`,
+		taskID,
+	).Scan(&executionID); err != nil {
+		return err
+	}
+
+	payload := normalizeJSON(output)
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE task_attempts
+		SET status = $2,
+			finished_at = NOW(),
+			output_json = $3
+		WHERE id = $1
+	`, attemptID, domain.TaskAttemptStatusSucceeded, payload); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE task_instances
+		SET status = $2,
+			output_json = $3,
+			completed_at = NOW(),
+			updated_at = NOW()
+		WHERE id = $1
+	`, taskID, domain.TaskStatusSucceeded, payload); err != nil {
+		return err
+	}
+
+	var nextTaskID string
+	if err := tx.QueryRow(ctx, `
+		INSERT INTO task_instances (
+			workflow_execution_id,
+			task_name,
+			handler_key,
+			status,
+			input_json,
+			idempotency_key,
+			created_at,
+			updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+		RETURNING id
+	`,
+		executionID,
+		nextTaskName,
+		nextHandlerKey,
+		domain.TaskStatusPending,
+		payload,
+		fmt.Sprintf("%s:%s", executionID, nextTaskName),
+	).Scan(&nextTaskID); err != nil {
+		return err
+	}
+
+	dispatchPayload, err := json.Marshal(domain.DispatchTaskPayload{
+		TaskID:      nextTaskID,
+		ExecutionID: executionID,
+		HandlerKey:  nextHandlerKey,
+	})
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO outbox_events (
+			aggregate_type,
+			aggregate_id,
+			event_type,
+			payload_json,
+			available_at
+		)
+		VALUES ($1, $2, $3, $4, NOW())
+	`, "task_instance", nextTaskID, "task.dispatch", dispatchPayload); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
 func (s *Store) EnqueueDueTaskRetries(ctx context.Context, limit int) (int, error) {
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {

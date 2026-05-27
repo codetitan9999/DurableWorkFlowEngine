@@ -26,13 +26,18 @@ const (
 Example WorkflowDefinition.DefinitionJSON:
 
 {
-  "entry_task": "sample-task",
+  "entry_task": "validate-order",
   "tasks": [
     {
-      "name": "sample-task",
+      "name": "validate-order",
+      "handler_key": "sample.echo",
+      "max_attempts": 3,
+      "backoff_seconds": 60,
+      "next_task": "send-confirmation"
+    },
+    {
+      "name": "send-confirmation",
       "handler_key": "sample.echo"
-	  "max_attempts": 3,
-	  "backoff_seconds": 60
     }
   ]
 }
@@ -49,6 +54,7 @@ type WorkflowTaskSpec struct {
 	HandlerKey     string `json:"handler_key"`
 	MaxAttempts    int    `json:"max_attempts"`
 	BackoffSeconds int    `json:"backoff_seconds"`
+	NextTask       string `json:"next_task"`
 }
 
 type WorkflowDefinition struct {

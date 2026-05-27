@@ -27,36 +27,37 @@ func NewWorker(store *db.Store, registry *handlers.Registry, logger *slog.Logger
 	}
 }
 
-func (w *Worker) GetTaskSpecByTaskID(ctx context.Context, task_id string) (domain.WorkflowTaskSpec, error) {
-	task, err := w.store.GetTaskInstance(ctx, task_id)
+func (w *Worker) GetWorkflowSpecAndTaskSpecByTaskID(ctx context.Context, taskID string) (domain.WorkflowDefinitionSpec, domain.WorkflowTaskSpec, error) {
+	task, err := w.store.GetTaskInstance(ctx, taskID)
 	if err != nil {
-		return domain.WorkflowTaskSpec{}, fmt.Errorf("error fetching task from store: %w", err)
+		return domain.WorkflowDefinitionSpec{}, domain.WorkflowTaskSpec{}, fmt.Errorf("error fetching task from store: %w", err)
 	}
 
 	execution, err := w.store.GetWorkflowExecution(ctx, task.WorkflowExecutionID)
 	if err != nil {
-		return domain.WorkflowTaskSpec{}, fmt.Errorf("error fetching execution from store: %w", err)
+		return domain.WorkflowDefinitionSpec{}, domain.WorkflowTaskSpec{}, fmt.Errorf("error fetching execution from store: %w", err)
 	}
 
 	workflowDef, err := w.store.GetWorkflowDefinition(ctx, execution.WorkflowDefinitionID)
 	if err != nil {
-		return domain.WorkflowTaskSpec{}, fmt.Errorf("error fetching workflow definition from store: %w", err)
+		return domain.WorkflowDefinitionSpec{}, domain.WorkflowTaskSpec{}, fmt.Errorf("error fetching workflow definition from store: %w", err)
 	}
 
 	workflowSpec, err := ParseAndValidateWorkflowDefinition(workflowDef.DefinitionJSON)
 	if err != nil {
-		return domain.WorkflowTaskSpec{}, fmt.Errorf("error parsing workflow definition JSON: %w", err)
+		return domain.WorkflowDefinitionSpec{}, domain.WorkflowTaskSpec{}, fmt.Errorf("error parsing workflow definition JSON: %w", err)
 	}
 
 	taskSpec, err := FindTaskSpecByName(workflowSpec, task.TaskName)
 	if err != nil {
-		return domain.WorkflowTaskSpec{}, fmt.Errorf("error finding task spec by name: %w", err)
+		return domain.WorkflowDefinitionSpec{}, domain.WorkflowTaskSpec{}, fmt.Errorf("error finding task spec by name: %w", err)
 	}
 
-	return taskSpec, nil
+	return workflowSpec, taskSpec, nil
 }
+
 func (w *Worker) HandleDispatchedTask(ctx context.Context, message queue.TaskMessage) error {
-	taskSpec, err := w.GetTaskSpecByTaskID(ctx, message.TaskID)
+	workflowSpec, taskSpec, err := w.GetWorkflowSpecAndTaskSpecByTaskID(ctx, message.TaskID)
 	if err != nil {
 		telemetry.TasksProcessed.WithLabelValues("worker", message.HandlerKey, "task_spec_error").Inc()
 		return fmt.Errorf("error getting task spec for task ID %s: %w", message.TaskID, err)
@@ -107,6 +108,19 @@ func (w *Worker) HandleDispatchedTask(ctx context.Context, message queue.TaskMes
 		}
 		telemetry.TasksProcessed.WithLabelValues("worker", message.HandlerKey, "failed").Inc()
 		return err
+	}
+
+	if nextTaskSpec, hasNextTask, err := FindNextTaskSpec(workflowSpec, task.TaskName); err != nil {
+		telemetry.TasksProcessed.WithLabelValues("worker", message.HandlerKey, "task_spec_error").Inc()
+		return fmt.Errorf("error resolving next task for %s: %w", task.TaskName, err)
+	} else if hasNextTask {
+		if err := w.store.CompleteTaskAttemptAndEnqueueNextTask(ctx, task.ID, attempt.ID, nextTaskSpec.Name, nextTaskSpec.HandlerKey, output); err != nil {
+			telemetry.TasksProcessed.WithLabelValues("worker", message.HandlerKey, "persist_error").Inc()
+			return fmt.Errorf("error completing task attempt and enqueuing next task: %w", err)
+		}
+		telemetry.TasksProcessed.WithLabelValues("worker", message.HandlerKey, "advanced").Inc()
+		w.logger.InfoContext(ctx, "task completed and next task enqueued", "task_id", task.ID, "attempt_id", attempt.ID, "next_task", nextTaskSpec.Name)
+		return nil
 	}
 
 	if err := w.store.CompleteTaskAttempt(ctx, task.ID, attempt.ID, output); err != nil {

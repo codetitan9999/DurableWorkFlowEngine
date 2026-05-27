@@ -136,6 +136,14 @@ func ParseAndValidateWorkflowDefinition(raw json.RawMessage) (domain.WorkflowDef
 		if task.BackoffSeconds < 0 {
 			return domain.WorkflowDefinitionSpec{}, errors.New("workflow definition tasks must have backoff_seconds of at least 0")
 		}
+		if strings.TrimSpace(task.NextTask) != "" && strings.TrimSpace(task.NextTask) == strings.TrimSpace(task.Name) {
+			return domain.WorkflowDefinitionSpec{}, errors.New("workflow definition tasks cannot have next_task that points to itself")
+		}
+		if strings.TrimSpace(task.NextTask) != "" {
+			if _, err := FindTaskSpecByName(workflowSpec, task.NextTask); err != nil {
+				return domain.WorkflowDefinitionSpec{}, fmt.Errorf("workflow definition tasks have invalid next_task: %w", err)
+			}
+		}
 	}
 	if !entryTaskFound {
 		return domain.WorkflowDefinitionSpec{}, errors.New("entry_task must be one of the tasks defined in the workflow definition")
@@ -163,4 +171,18 @@ func FindTaskSpecByName(workflowSpec domain.WorkflowDefinitionSpec, taskName str
 	}
 
 	return domain.WorkflowTaskSpec{}, errors.New("task not found in workflow definition: " + taskName)
+}
+func FindNextTaskSpec(workflowSpec domain.WorkflowDefinitionSpec, currentTaskName string) (domain.WorkflowTaskSpec, bool, error) {
+	taskSpec, err := FindTaskSpecByName(workflowSpec, currentTaskName)
+	if err != nil {
+		return domain.WorkflowTaskSpec{}, false, fmt.Errorf("failed to find current task: %w", err)
+	}
+	if strings.TrimSpace(taskSpec.NextTask) == "" {
+		return domain.WorkflowTaskSpec{}, false, nil
+	}
+	nextTaskSpec, err := FindTaskSpecByName(workflowSpec, taskSpec.NextTask)
+	if err != nil {
+		return domain.WorkflowTaskSpec{}, false, fmt.Errorf("invalid next_task reference: %w", err)
+	}
+	return nextTaskSpec, true, nil
 }
