@@ -1,0 +1,327 @@
+{
+  "info": {
+    "_postman_id": "0e3ea0d2-4c0b-4eb5-9187-a2c9e0f73b10",
+    "name": "DurableFlow",
+    "description": "Postman collection for DurableFlow health, workflow creation, execution, dead-letter inspection, and replay.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "API health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/healthz",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "healthz"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Worker health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{workerBaseUrl}}/healthz",
+              "host": [
+                "{{workerBaseUrl}}"
+              ],
+              "path": [
+                "healthz"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Successful linear workflow",
+      "item": [
+        {
+          "name": "Create workflow definition",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const unique = Date.now();",
+                  "pm.variables.set('workflowName', `postman-success-${unique}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(201);",
+                  "const data = pm.response.json();",
+                  "pm.environment.set('workflowDefinitionId', data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{workflowName}}\",\n  \"description\": \"Successful two-step workflow created from Postman.\",\n  \"definition\": {\n    \"entry_task\": \"validate-order\",\n    \"tasks\": [\n      {\n        \"name\": \"validate-order\",\n        \"handler_key\": \"sample.echo\",\n        \"next_task\": \"send-confirmation\",\n        \"max_attempts\": 3,\n        \"backoff_seconds\": 5\n      },\n      {\n        \"name\": \"send-confirmation\",\n        \"handler_key\": \"notifications.send\"\n      }\n    ]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/workflows",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "workflows"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Trigger execution",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(202);",
+                  "const data = pm.response.json();",
+                  "pm.environment.set('executionId', data.execution.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workflow_definition_id\": \"{{workflowDefinitionId}}\",\n  \"input\": {\n    \"customer_id\": \"demo-customer-123\",\n    \"order_id\": \"demo-order-456\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/executions",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "executions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get execution snapshot",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/executions/{{executionId}}",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "executions",
+                "{{executionId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dead-letter and replay",
+      "item": [
+        {
+          "name": "Create dead-letter workflow",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const unique = Date.now();",
+                  "pm.variables.set('deadLetterWorkflowName', `postman-dead-letter-${unique}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(201);",
+                  "const data = pm.response.json();",
+                  "pm.environment.set('deadLetterWorkflowDefinitionId', data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{deadLetterWorkflowName}}\",\n  \"description\": \"Dead-letter workflow created from Postman.\",\n  \"definition\": {\n    \"entry_task\": \"broken-step\",\n    \"tasks\": [\n      {\n        \"name\": \"broken-step\",\n        \"handler_key\": \"missing.handler\"\n      }\n    ]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/workflows",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "workflows"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Trigger dead-letter execution",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(202);",
+                  "const data = pm.response.json();",
+                  "pm.environment.set('deadLetterExecutionId', data.execution.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workflow_definition_id\": \"{{deadLetterWorkflowDefinitionId}}\",\n  \"input\": {\n    \"case\": \"dead-letter-demo\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/executions",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "executions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get dead-letter execution snapshot",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/executions/{{deadLetterExecutionId}}",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "executions",
+                "{{deadLetterExecutionId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List dead-letter tasks",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.response.to.have.status(200);",
+                  "const data = pm.response.json();",
+                  "if (Array.isArray(data) && data.length > 0) {",
+                  "  const matched = data.find(task => task.workflow_execution_id === pm.environment.get('deadLetterExecutionId')) || data[0];",
+                  "  pm.environment.set('deadLetterTaskId', matched.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/dead-letter-tasks?limit=10",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dead-letter-tasks"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Replay dead-letter task",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/tasks/{{deadLetterTaskId}}/replay",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "{{deadLetterTaskId}}",
+                "replay"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
