@@ -24,6 +24,8 @@ This folder contains a ready-to-import Postman collection and a local environmen
 
 1. `API health`
 2. `Worker health`
+3. `API metrics`
+4. `Worker metrics`
 
 ### Successful linear workflow
 
@@ -43,7 +45,8 @@ from the earlier responses automatically.
 1. `Create dead-letter workflow`
 2. `Trigger dead-letter execution`
 3. `List dead-letter tasks`
-4. `Replay dead-letter task`
+4. `List dead-letter tasks (legacy alias)`
+5. `Replay dead-letter task`
 
 The collection stores:
 
@@ -57,3 +60,4 @@ automatically where possible.
 
 - The `Create workflow definition` requests use timestamp-based names so repeated runs do not fail on duplicate names.
 - Replay only works for tasks that are already `dead_lettered`.
+- The collection includes both `/api/dead-letter-tasks` and `/api/dead-lettered-tasks` because the API currently supports both paths.

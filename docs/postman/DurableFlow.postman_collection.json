@@ -40,6 +40,38 @@
               ]
             }
           }
+        },
+        {
+          "name": "API metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/metrics",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "metrics"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Worker metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{workerBaseUrl}}/metrics",
+              "host": [
+                "{{workerBaseUrl}}"
+              ],
+              "path": [
+                "metrics"
+              ]
+            }
+          }
         }
       ]
     },
@@ -292,6 +324,29 @@
               "path": [
                 "api",
                 "dead-letter-tasks"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List dead-letter tasks (legacy alias)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/dead-lettered-tasks?limit=10",
+              "host": [
+                "{{apiBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dead-lettered-tasks"
               ],
               "query": [
                 {
