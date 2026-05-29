@@ -81,6 +81,24 @@ Key takeaways from this diagram:
 - the outbox sits between durable writes and queue publish
 - the worker is free to receive duplicate deliveries because correctness lives in Postgres and idempotent handlers
 
+## Diagram set
+
+The architecture is easiest to explain with three views:
+
+- HLD: how the main services and infrastructure pieces interact
+- ER: how durable state is modeled in Postgres
+- Class diagram: how orchestration, persistence, queueing, and handlers are separated in code
+
+### HLD
+
+The high-level design above is the system-level view. It is the best first diagram to draw in an interview because it explains the core split:
+
+- Postgres stores truth
+- Redis carries delivery opportunities
+- API creates state
+- worker advances state
+- the dashboard exposes the system to an operator
+
 ## Component responsibilities
 
 ### API service
@@ -259,6 +277,211 @@ Why it matters:
 - a successfully completed response can be reused on duplicate delivery
 - the same task instance can safely resume its own in-progress reservation
 - a different task instance cannot hijack that same side-effect boundary
+
+## Entity-relationship diagram
+
+This ER view shows the durable workflow model more directly than the service-level HLD.
+
+```mermaid
+erDiagram
+    WORKFLOW_DEFINITIONS ||--o{ WORKFLOW_EXECUTIONS : "used by"
+    WORKFLOW_EXECUTIONS ||--o{ TASK_INSTANCES : "contains"
+    TASK_INSTANCES ||--o{ TASK_ATTEMPTS : "has"
+    TASK_INSTANCES ||--o{ OUTBOX_EVENTS : "dispatches"
+    TASK_INSTANCES ||--o| IDEMPOTENCY_RECORDS : "owns"
+
+    WORKFLOW_DEFINITIONS {
+        uuid id PK
+        string name
+        string description
+        json definition_json
+        string status
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    WORKFLOW_EXECUTIONS {
+        uuid id PK
+        uuid workflow_definition_id FK
+        string status
+        json input_json
+        json output_json
+        string error_text
+        timestamp created_at
+        timestamp updated_at
+        timestamp started_at
+        timestamp completed_at
+    }
+
+    TASK_INSTANCES {
+        uuid id PK
+        uuid workflow_execution_id FK
+        string task_name
+        string handler_key
+        string status
+        json input_json
+        json output_json
+        string last_error_text
+        int attempts_total
+        string idempotency_key
+        timestamp next_run_at
+        timestamp created_at
+        timestamp updated_at
+        timestamp completed_at
+    }
+
+    TASK_ATTEMPTS {
+        uuid id PK
+        uuid task_instance_id FK
+        int attempt_number
+        string status
+        json output_json
+        string error_text
+        timestamp started_at
+        timestamp finished_at
+        timestamp created_at
+    }
+
+    OUTBOX_EVENTS {
+        uuid id PK
+        string aggregate_type
+        uuid aggregate_id
+        string event_type
+        json payload_json
+        timestamp available_at
+        timestamp dispatched_at
+        int attempts
+        string last_error_text
+        timestamp created_at
+    }
+
+    IDEMPOTENCY_RECORDS {
+        uuid id PK
+        string handler_key
+        string idempotency_key
+        string status
+        json response_json
+        uuid owner_task_instance_id FK
+        timestamp created_at
+        timestamp updated_at
+    }
+```
+
+Reading this diagram from left to right:
+
+- a workflow definition is reused across many executions
+- an execution contains many task instances
+- a task instance can have many attempts
+- a task instance can create many outbox dispatch events across first run, retries, replay, and chaining
+- a task instance can own one idempotency reservation boundary
+
+## Class diagram
+
+This class view is useful when walking through the codebase because it shows how the system is layered instead of mixing orchestration logic into transport or persistence code.
+
+```mermaid
+classDiagram
+    class Service {
+        +CreateWorkflowDefinition()
+        +TriggerExecution()
+        +GetExecutionSnapshot()
+        +GetDeadLetteredTasks()
+        +ReplayDeadLetteredTask()
+    }
+
+    class Worker {
+        +HandleDispatchedTask()
+        +GetWorkflowSpecAndTaskSpecByTaskID()
+    }
+
+    class Store {
+        +CreateWorkflowDefinition()
+        +GetWorkflowDefinition()
+        +CreateWorkflowExecution()
+        +GetWorkflowExecution()
+        +CreateTaskInstance()
+        +GetTaskInstance()
+        +StartTaskAttempt()
+        +CompleteTaskAttempt()
+        +CompleteTaskAttemptAndEnqueueNextTask()
+        +ScheduleTaskRetry()
+        +FailTaskAttempt()
+        +ListDeadLetteredTasks()
+        +ReplayDeadLetteredTask()
+    }
+
+    class Publisher {
+        +Run()
+        +publishOnce()
+    }
+
+    class RedisStreams {
+        +PublishTaskDispatch()
+        +Consume()
+        +WaitForReady()
+        +Ping()
+    }
+
+    class HandlerRegistry {
+        +Get()
+    }
+
+    class Handler {
+        <<interface>>
+        +Key()
+        +Handle()
+    }
+
+    class SampleEchoHandler {
+        +Key()
+        +Handle()
+    }
+
+    class NotificationSendHandler {
+        +Key()
+        +Handle()
+    }
+
+    class WorkflowDefinitionSpec {
+        +EntryTask
+        +Tasks[]
+    }
+
+    class WorkflowTaskSpec {
+        +Name
+        +HandlerKey
+        +NextTask
+        +MaxAttempts
+        +BackoffSeconds
+    }
+
+    class DispatchTaskPayload {
+        +TaskID
+        +ExecutionID
+        +HandlerKey
+    }
+
+    Service --> Store
+    Worker --> Store
+    Worker --> HandlerRegistry
+    HandlerRegistry --> Handler
+    SampleEchoHandler ..|> Handler
+    NotificationSendHandler ..|> Handler
+    Publisher --> Store
+    Publisher --> RedisStreams
+    Worker --> WorkflowDefinitionSpec
+    WorkflowDefinitionSpec --> WorkflowTaskSpec
+    RedisStreams --> DispatchTaskPayload
+```
+
+The most important relationships in this diagram are:
+
+- `Service` owns API-level orchestration
+- `Worker` owns runtime execution decisions
+- `Store` is the persistence boundary
+- `Publisher` bridges Postgres outbox rows into Redis dispatch
+- `HandlerRegistry` decouples orchestration from handler implementations
+- workflow definition parsing stays explicit through `WorkflowDefinitionSpec` and `WorkflowTaskSpec`
 
 ## Low-level execution flow
 
