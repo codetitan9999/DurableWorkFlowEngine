@@ -531,6 +531,98 @@ stateDiagram-v2
     succeeded --> [*]
 ```
 
+## Feature flow diagrams
+
+The low-level execution diagram above shows the full system path. The diagrams below isolate the most correctness-sensitive features so each one can be explained on its own without mentally filtering the rest of the engine.
+
+### Retry flow
+
+Retries are modeled as durable state, not as in-memory sleep.
+
+```mermaid
+flowchart TD
+    A["Worker consumes task message"] --> B["Load task and start attempt"]
+    B --> C["Run handler"]
+    C --> D{"Did the handler fail?"}
+    D -->|no| E["Normal success path"]
+    D -->|yes| F{"Retries left?"}
+    F -->|no| G["Terminal failure path"]
+    F -->|yes| H["Mark attempt failed"]
+    H --> I["Move task back to pending"]
+    I --> J["Persist next_run_at"]
+    J --> K["Scheduler queries due retry tasks"]
+    K --> L["Create retry outbox_event"]
+    L --> M["Outbox publisher dispatches retry"]
+    M --> N["Redis Streams delivers task again"]
+    N --> A
+```
+
+What this diagram highlights:
+
+- retry intent survives worker restarts because `next_run_at` is stored in Postgres
+- retry dispatch uses the same outbox path as first-run dispatch
+- the worker does not sleep waiting for retry time to pass
+
+### Dead-letter and replay flow
+
+Dead-lettering is the terminal state for work that exhausted its retry policy. Replay is the manual recovery path that puts that work back through the same durable dispatch pipeline.
+
+```mermaid
+flowchart TD
+    A["Worker runs handler"] --> B{"Failure with retries exhausted?"}
+    B -->|no| C["Another path applies"]
+    B -->|yes| D["Mark attempt failed"]
+    D --> E["Mark task dead_lettered"]
+    E --> F["Mark workflow_execution failed"]
+    F --> G["Expose task through dead-letter API and UI"]
+    G --> H["Operator inspects failure"]
+    H --> I["Operator clicks replay"]
+    I --> J["Reset task to pending"]
+    J --> K["Move execution back to running"]
+    K --> L["Create replay outbox_event"]
+    L --> M["Outbox publisher dispatches replay"]
+    M --> N["Worker processes task again"]
+```
+
+What this diagram highlights:
+
+- dead-lettering is represented in authoritative task state, not only in queue transport
+- operators recover failed work through replay instead of mutating state manually
+- replay reuses the normal outbox path rather than bypassing orchestration
+
+### Duplicate delivery and idempotency flow
+
+Duplicate-delivery protection is layered. The worker first checks whether the task should run at all, and only then does the handler cross a durable idempotency boundary before performing a side effect.
+
+```mermaid
+flowchart TD
+    A["Redis message arrives<br/>fresh, reclaimed, or duplicated"] --> B["Worker loads task from Postgres"]
+    B --> C{"Is task runnable?"}
+    C -->|no: succeeded, running,<br/>or dead_lettered| D["Skip execution and ack message"]
+    C -->|yes| E["Start task_attempt"]
+    E --> F["Handler begins idempotent operation"]
+    F --> G{"Existing idempotency record?"}
+    G -->|no| H["Create in_progress reservation<br/>owned by this task"]
+    H --> I["Perform side effect"]
+    I --> J["Store completed response"]
+    J --> K["Finish task normally"]
+
+    G -->|completed| L["Reuse stored response"]
+    L --> K
+
+    G -->|in_progress, same owner| M["Resume safely after retry or reclaim"]
+    M --> I
+
+    G -->|in_progress, different owner| N["Block duplicate side effect"]
+    N --> O["Return duplicate/conflict outcome"]
+```
+
+What this diagram highlights:
+
+- Postgres task state answers "should this task still run?"
+- `idempotency_records` answers "if handler code runs again, should the side effect run again?"
+- the same task instance can resume unfinished idempotent work, but a different task instance cannot hijack that boundary
+
 ## Main workflow paths
 
 ### Path 1: execution creation
