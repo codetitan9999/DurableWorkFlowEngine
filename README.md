@@ -164,6 +164,66 @@ The stack is meant to run as a reproducible local distributed system, not as a s
 - `outbox_events`
 - `idempotency_records`
 
+## Performance and Boundaries
+
+DurableFlow now has measured behavior, not just architectural claims. The numbers below come from local benchmark runs against the real API, outbox publisher, Redis Streams path, and worker execution path.
+
+### Default runtime shape
+
+With the default `OUTBOX_POLL_INTERVAL=2s`, the `2-step` happy-path workflow plateaued at roughly `~5 exec/s`:
+
+- `120` executions, concurrency `30`: `4.99 exec/s`, reported latency avg `5.79s`, p95 `5.98s`
+- `240` executions, concurrency `60`: `4.99 exec/s`, reported latency avg `11.47s`, p95 `11.99s`
+
+That ceiling matched the current design closely:
+
+- outbox publisher drains up to `20` rows per poll
+- default poll interval is `2s`
+- a `2-step` workflow needs `2` dispatches per execution
+- theoretical ceiling is therefore about `~5 exec/s`
+
+### Tuned runtime shape
+
+To test whether that ceiling was architectural or configuration-driven, the API was rerun with `OUTBOX_POLL_INTERVAL=100ms` and no code changes. Under that tuned setting, the same `2-step` workflow sustained roughly `~99 exec/s`:
+
+- `240` executions, concurrency `60`: `97.30 exec/s`, avg `462ms`, p95 `524ms`
+- `1000` executions, concurrency `200`: `98.92 exec/s`, avg `1.80s`, p95 `1.97s`
+- `5000` executions, concurrency `500`, `1s` polling: `99.28 exec/s`, avg `4.43s`, p95 `4.92s`
+- `10000` executions, concurrency `1000`, `1s` polling: `99.45 exec/s`, avg `9.26s`, p95 `9.86s`
+
+This was one of the most useful measurement results in the project because it showed that the first hard boundary was publisher cadence, not worker count.
+
+### Failure-path behavior
+
+The benchmark suite also measured the harder correctness paths:
+
+- persisted retries, `3` attempts, `1s` backoff: `0.53 exec/s` by default and `1.25 exec/s` under the tuned outbox cadence, with exactly `3` attempts per execution
+- immediate dead-letter on missing handler: `1.38 exec/s`, avg `1.58s`, p95 `1.83s`
+- replay of a dead-lettered task through the normal dispatch path: avg `3.77s`, p95 `3.93s`, with exactly `2` attempts per execution
+
+### Crash recovery
+
+One run intentionally stopped the only worker mid-flight, waited through the reclaim window, then restarted it:
+
+- all `20/20` executions still succeeded
+- throughput dropped to `0.29 exec/s`
+- reported latency avg rose to `16.77s`
+- reported latency p95 rose to `55.82s`
+- attempts per execution still stayed at `2`
+
+That validates an important property of the engine: consumer failure can delay work significantly, but the system still recovers without losing execution correctness.
+
+### Current boundary story
+
+The current measurements support these conclusions:
+
+- default-shape throughput is outbox-cadence bound at about `~5 exec/s`
+- tuned happy-path throughput sustains about `~99 exec/s` in the local environment for the current `2-step` workflow
+- adding more workers did not materially improve the default-path benchmark, which suggests the first bottleneck is upstream of worker parallelism
+- under extremely aggressive snapshot polling, the control-plane read path becomes a separate limit before the workflow engine itself fails
+
+The full methodology, scenario list, and measured results live in [docs/benchmarks.md](docs/benchmarks.md).
+
 ## Dashboard walkthrough
 
 The dashboard is intentionally small, but each panel maps directly to a core part of the system:
