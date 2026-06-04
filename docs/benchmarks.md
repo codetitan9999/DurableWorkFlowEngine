@@ -1,8 +1,8 @@
-# DurableFlow Benchmark Plan
+# DurableFlow Benchmarks
 
-This document exists to turn DurableFlow from "uses distributed-systems patterns" into "implements and measures distributed-systems behavior."
+This document describes how DurableFlow is measured locally and what those measurements are meant to show.
 
-The goal is not to manufacture giant scale numbers. The goal is to produce honest, repeatable evidence for:
+The focus is on repeatable measurements for:
 
 - end-to-end latency
 - steady-state throughput
@@ -11,18 +11,18 @@ The goal is not to manufacture giant scale numbers. The goal is to produce hones
 - dead-letter timing
 - crash-recovery semantics
 
-For a personal workflow engine, those measurements are more credible than inflated TPS claims.
+These runs are meant to show how the current implementation behaves, where the first bottlenecks appear, and which parts of the system are sensitive to configuration.
 
 ## What is already true without benchmarking
 
-These repo facts are already safe to use:
+These repo facts are useful background for the benchmark runs:
 
 - `8` services in the local stack: `api`, `worker`, `web`, `postgres`, `redis`, `otel-collector`, `prometheus`, `grafana`
 - `6` core workflow/state tables: `workflow_definitions`, `workflow_executions`, `task_instances`, `task_attempts`, `outbox_events`, `idempotency_records`
 - `24` focused test cases across orchestration, handlers, queue decoding/recovery helpers, and API-path validation
 - a workflow engine with explicit at-least-once delivery, durable retries, dead-letter replay, stale-message reclaim, and handler-level idempotency
 
-These are good architecture and correctness signals, but they are not enough to claim performance or scale.
+These are useful implementation and correctness signals, but they do not say much about throughput or latency on their own.
 
 ## Benchmark harness
 
@@ -39,7 +39,7 @@ It reports two latency views:
 - observed latency: request trigger until the harness sees a terminal snapshot
 - reported engine latency: `started_at` to `completed_at` from the execution snapshot
 
-The reported engine latency is the number to prefer in resume bullets because it removes most poll-interval noise.
+The reported engine latency is usually the more stable number because it removes most snapshot-poll noise.
 
 ## Supported scenarios
 
@@ -50,7 +50,7 @@ Creates a two-step workflow:
 - `validate-order` -> `sample.echo`
 - `send-confirmation` -> `notifications.send`
 
-Use this scenario to measure:
+This scenario is useful for measuring:
 
 - happy-path latency
 - steady-state throughput
@@ -60,7 +60,7 @@ Use this scenario to measure:
 
 Creates a one-step workflow using `sample.echo` and intentionally passes invalid JSON shape (`123`) so the handler fails, schedules persisted retries, and eventually dead-letters after exhausting `max_attempts`.
 
-Use this scenario to measure:
+This scenario is useful for measuring:
 
 - retry timing
 - attempts-to-terminal-failure behavior
@@ -70,7 +70,7 @@ Use this scenario to measure:
 
 Creates a one-step workflow with a missing handler and configurable retry settings.
 
-Use this scenario to measure:
+This scenario is useful for measuring:
 
 - immediate terminal-failure latency
 - dead-letter visibility without retry overhead
@@ -112,7 +112,7 @@ Capture:
 - reported latency `avg`, `p50`, `p95`
 - attempts per execution
 
-This gives the first honest performance line for the project.
+This gives a simple baseline for the happy path.
 
 ### B. Higher concurrency happy path
 
@@ -131,7 +131,7 @@ Capture:
 - reported latency `p95`
 - whether attempts stay at `2` per execution for the two-step workflow
 
-This tells you whether the system still behaves cleanly when many executions are active at once.
+This shows how the happy path behaves once multiple executions are active at the same time.
 
 ### C. Retry and dead-letter timing
 
@@ -152,7 +152,7 @@ Capture:
 - reported latency to terminal failure
 - whether terminal state is consistently `failed`
 
-This gives you evidence that retries are persisted and dead-lettering is deterministic.
+This is useful for checking whether retries are actually being scheduled from durable state and whether terminal failure is consistent.
 
 ### D. Immediate dead-letter timing
 
@@ -188,7 +188,7 @@ Capture:
 - latency from first run through replay and second terminal failure
 - attempts per execution after replay
 
-This gives you a measurable replay-path result instead of only a functional demo.
+This gives a measurable replay result instead of only confirming that the flow works.
 
 ### F. Worker-scaling comparison
 
@@ -204,11 +204,11 @@ Then rerun scenario B and compare:
 - throughput change
 - `p95` latency change
 
-This gives you an honest statement about how the current design responds to additional workers, even in a local environment.
+This shows whether the current design benefits from additional workers in the local setup.
 
 ### G. Crash-recovery validation
 
-This is the most important non-throughput check.
+This is a useful non-throughput check because it exercises recovery behavior directly.
 
 Suggested flow:
 
@@ -221,7 +221,7 @@ Suggested flow:
    - dead-letter list
    - Prometheus task metrics
 
-This scenario does not need a giant number attached to it. It gives you a stronger claim:
+The point of this scenario is to verify that:
 
 - work was recovered after consumer failure
 - reclaimed messages still respected task-state checks and idempotency boundaries
@@ -276,9 +276,9 @@ These help validate:
 - outbox publish behavior
 - worker success/retry/failure mix
 
-## Resume-safe phrasing after results exist
+## Using the results
 
-Once you have real measurements, prefer wording like this:
+If you want to summarize the measurements later, wording like this stays close to what the runs actually show:
 
 - Built a fault-tolerant workflow engine in Go and measured `X exec/s` at `Y` concurrent executions with `p95` completion latency of `Z` in a local `8`-service stack.
 - Validated persisted retry and dead-letter semantics across `N` benchmarked executions, with terminal failures reaching a stable dead-letter state after `A` attempts and `B` seconds of configured backoff.
@@ -290,11 +290,11 @@ Avoid wording like:
 - production-grade scale
 - exactly-once delivery
 
-Those claims are not what this repo currently proves.
+Those claims are broader than what these runs show.
 
 ## Next observability upgrades
 
-The current benchmark harness is enough to get honest first numbers. The next instrumentation upgrades that would make the project stronger are:
+The current benchmark harness is enough for a first pass. The next instrumentation upgrades that would make these runs easier to interpret are:
 
 - HTTP duration histogram
 - task processing duration histogram
@@ -307,7 +307,7 @@ Those would let future benchmark runs produce even stronger evidence with less m
 
 ## Measured local results
 
-The following results were captured on `2026-06-05` against the local Docker-based stack. These are local validation numbers, not production-scale claims.
+The following results were captured on `2026-06-05` against the local Docker-based stack. They describe local behavior and should be read that way.
 
 ### Single-worker baseline
 
@@ -323,14 +323,14 @@ The following results were captured on `2026-06-05` against the local Docker-bas
 
 ### Default-shape saturation results
 
-The most useful default-path result came from pushing the same `2-step` happy-path workflow harder:
+One useful default-path result came from pushing the same `2-step` happy-path workflow harder:
 
 | Scenario | Workload | Throughput | Reported latency |
 | --- | --- | ---: | --- |
 | `success-linear` | `120` exec, concurrency `30` | `4.99 exec/s` | avg `5.79s`, p95 `5.98s` |
 | `success-linear` | `240` exec, concurrency `60` | `4.99 exec/s` | avg `11.47s`, p95 `11.99s` |
 
-Interpretation:
+Notes:
 
 - with the default `OUTBOX_POLL_INTERVAL=2s`, the system plateaued almost exactly at `~5 exec/s`
 - increasing workload beyond that point did not increase throughput further
@@ -347,7 +347,7 @@ That implies a theoretical ceiling near:
 - `20 outbox rows / 2s = 10 dispatches/s`
 - `10 dispatches/s / 2 tasks per execution = ~5 exec/s`
 
-The measured plateau matched that model closely, which makes this one of the strongest "measured system understanding" results in the project.
+The measured plateau was close to that model.
 
 ### Crash-recovery validation
 
@@ -363,7 +363,7 @@ Result:
 - reported latency p95 rose to `55.82s`
 - attempts per execution remained `2`
 
-What this shows:
+Notes:
 
 - work was delayed significantly by consumer failure and reclaim timing
 - work was not lost
@@ -379,7 +379,7 @@ Observed result:
 - throughput stayed effectively flat at `3.88 exec/s`
 - latency stayed effectively flat as well
 
-Interpretation:
+Notes:
 
 - the current bottleneck is likely upstream of worker parallelism
 - the main limiting factor in this local setup appears closer to outbox publish cadence and end-to-end orchestration timing than raw worker count
@@ -399,21 +399,19 @@ The repo code did not change for this comparison. Only the runtime poll interval
 | `success-linear` tuned | `2000` exec, concurrency `400` | `99.06 exec/s` | avg `3.70s`, p95 `3.96s` |
 | `retry-invalid-input` tuned | `6` exec, concurrency `3`, `3` attempts, `1s` backoff | `1.25 exec/s` | avg `2.27s`, p95 `2.28s` |
 
-Interpretation:
+Notes:
 
 - the `~5 exec/s` default plateau was mostly publisher-cadence bound
 - reducing the outbox poll interval by `20x` increased measured happy-path throughput by roughly `20x`
 - the next observed ceiling under local load was roughly `~99 exec/s` for the `2-step` workflow
 - persisted retries also became much closer to the configured backoff floor once outbox cadence was no longer the dominant delay
 
-This is a strong result because it shows:
-
-- the system was benchmarked enough to expose its first bottleneck
-- the bottleneck hypothesis was tested with a controlled configuration change
-- the resulting throughput shift matched the architectural expectation
+- the first bottleneck in the default setup was mainly publisher cadence
+- changing that cadence had a direct effect on measured throughput
+- the resulting shift was consistent with the architecture
 
 ### Important benchmarking note
 
-Benchmarking exposed a real bug in the retry scheduler path: due retries could become stuck because `EnqueueDueTaskRetries` kept a query cursor open and then attempted additional `Exec` calls inside the same transaction, causing repeated `conn busy` failures in the outbox loop.
+Benchmarking also exposed a bug in the retry scheduler path: due retries could become stuck because `EnqueueDueTaskRetries` kept a query cursor open and then attempted additional `Exec` calls inside the same transaction, causing repeated `conn busy` failures in the outbox loop.
 
-That issue was fixed before the persisted-retry benchmark above was recorded. This is one of the strongest kinds of benchmark evidence: the benchmark suite did not just produce numbers, it surfaced and helped validate a real correctness bug in the retry path.
+That issue was fixed before the persisted-retry benchmark above was recorded. The benchmark suite was useful here because it surfaced the bug and gave a way to verify the fix.

@@ -91,7 +91,7 @@ The architecture is easiest to explain with three views:
 
 ### HLD
 
-The high-level design above is the system-level view. It is the best first diagram to draw in an interview because it explains the core split:
+The high-level design above is the system-level view. It highlights the main split in the system:
 
 - Postgres stores truth
 - Redis carries delivery opportunities
@@ -742,7 +742,7 @@ This keeps failure handling close to the authoritative task state and makes list
 
 ## Why idempotency needed its own table
 
-Task-level status alone is not enough to prove side-effect safety.
+Task-level status alone is not enough to establish side-effect safety.
 
 For example, a handler might:
 
@@ -758,11 +758,11 @@ Without a durable idempotency record, the next delivery cannot safely know wheth
 - release it if setup fails
 - allow the same task instance to resume if recovery is needed
 
-That is a major correctness improvement over “best effort” deduplication.
+This is more reliable than treating deduplication as a best-effort check.
 
 ## Current scope and deliberate limitations
 
-DurableFlow is intentionally strong on infrastructure correctness and intentionally narrow on workflow expressiveness.
+DurableFlow focuses more on execution and recovery behavior than on workflow expressiveness.
 
 What it supports today:
 

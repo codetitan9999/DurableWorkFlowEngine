@@ -68,7 +68,7 @@ That means:
 
 ### 2. Redis Streams is used only for delivery
 
-Redis is valuable here because it gives us asynchronous transport and consumer groups, but it is intentionally not trusted as the source of workflow truth.
+Redis is used here for asynchronous transport and consumer groups, but it is not treated as the source of workflow truth.
 
 If Redis says a message exists but Postgres says the task is already complete, Postgres wins.
 
@@ -80,11 +80,11 @@ The outbox is not only for first-run task dispatch. It is also used for:
 - dead-letter replay
 - next-task progression in a workflow chain
 
-That keeps the write path consistent and drastically reduces the number of “special case” delivery mechanisms.
+That keeps the write path consistent and reduces the number of separate delivery paths to reason about.
 
 ### 4. Idempotency is explicit, not implied
 
-The built-in handlers do not rely on wishful thinking around duplicate delivery. They reserve durable idempotency keys in Postgres, store successful responses, and allow the same task instance to resume work safely after retries or crash recovery.
+The built-in handlers reserve durable idempotency keys in Postgres, store successful responses, and allow the same task instance to resume work safely after retries or crash recovery.
 
 ## End-to-end flow
 
@@ -111,13 +111,13 @@ At a high level, one execution looks like this:
 
 ## Failure and recovery paths
 
-The project is strongest in the places where small systems usually break.
+This is where most of the failure-handling behavior lives.
 
 ### Retry scheduling
 
 Retries are not implemented as “sleep and try again.” A failed task is moved back to `pending`, its next eligible execution time is written into `task_instances.next_run_at`, and a scheduler loop materializes a new outbox event once that time arrives.
 
-That design matters because it survives restarts cleanly.
+This keeps retry timing in durable state instead of process memory.
 
 ### Dead-letter and replay
 
@@ -135,7 +135,7 @@ The built-in handlers use `idempotency_records` to reserve and complete side-eff
 - the same task instance can resume its own in-progress reservation
 - a different duplicate task instance is blocked from repeating the side effect
 
-That is one of the most important correctness guarantees in the project.
+This is one of the main correctness checks in the project.
 
 ## Current system shape
 
@@ -166,7 +166,7 @@ The stack is meant to run as a reproducible local distributed system, not as a s
 
 ## Performance and Boundaries
 
-DurableFlow now has measured behavior, not just architectural claims. The numbers below come from local benchmark runs against the real API, outbox publisher, Redis Streams path, and worker execution path.
+The project includes local benchmark runs against the real API, outbox publisher, Redis Streams path, and worker execution path. The goal of these runs is to show how the current implementation behaves under load and where the first bottlenecks appear.
 
 ### Default runtime shape
 
@@ -175,7 +175,7 @@ With the default `OUTBOX_POLL_INTERVAL=2s`, the `2-step` happy-path workflow pla
 - `120` executions, concurrency `30`: `4.99 exec/s`, reported latency avg `5.79s`, p95 `5.98s`
 - `240` executions, concurrency `60`: `4.99 exec/s`, reported latency avg `11.47s`, p95 `11.99s`
 
-That ceiling matched the current design closely:
+This lines up with the current design:
 
 - outbox publisher drains up to `20` rows per poll
 - default poll interval is `2s`
@@ -184,18 +184,18 @@ That ceiling matched the current design closely:
 
 ### Tuned runtime shape
 
-To test whether that ceiling was architectural or configuration-driven, the API was rerun with `OUTBOX_POLL_INTERVAL=100ms` and no code changes. Under that tuned setting, the same `2-step` workflow sustained roughly `~99 exec/s`:
+To check whether that ceiling came from the overall design or from a specific runtime setting, the API was rerun with `OUTBOX_POLL_INTERVAL=100ms` and no code changes. Under that tuned setting, the same `2-step` workflow sustained roughly `~99 exec/s`:
 
 - `240` executions, concurrency `60`: `97.30 exec/s`, avg `462ms`, p95 `524ms`
 - `1000` executions, concurrency `200`: `98.92 exec/s`, avg `1.80s`, p95 `1.97s`
 - `5000` executions, concurrency `500`, `1s` polling: `99.28 exec/s`, avg `4.43s`, p95 `4.92s`
 - `10000` executions, concurrency `1000`, `1s` polling: `99.45 exec/s`, avg `9.26s`, p95 `9.86s`
 
-This was one of the most useful measurement results in the project because it showed that the first hard boundary was publisher cadence, not worker count.
+This shows that the first boundary in the default setup was mainly publisher cadence, not worker count.
 
 ### Failure-path behavior
 
-The benchmark suite also measured the harder correctness paths:
+The benchmark suite also measured the failure and recovery paths:
 
 - persisted retries, `3` attempts, `1s` backoff: `0.53 exec/s` by default and `1.25 exec/s` under the tuned outbox cadence, with exactly `3` attempts per execution
 - immediate dead-letter on missing handler: `1.38 exec/s`, avg `1.58s`, p95 `1.83s`
@@ -211,11 +211,11 @@ One run intentionally stopped the only worker mid-flight, waited through the rec
 - reported latency p95 rose to `55.82s`
 - attempts per execution still stayed at `2`
 
-That validates an important property of the engine: consumer failure can delay work significantly, but the system still recovers without losing execution correctness.
+This shows that consumer failure can delay work significantly, while the system still recovers without losing execution correctness.
 
 ### Current boundary story
 
-The current measurements support these conclusions:
+At this point, the current measurements suggest:
 
 - default-shape throughput is outbox-cadence bound at about `~5 exec/s`
 - tuned happy-path throughput sustains about `~99 exec/s` in the local environment for the current `2-step` workflow
@@ -396,7 +396,7 @@ curl -X POST http://localhost:8080/api/tasks/<task-id>/replay
 
 ## Current scope and limitations
 
-DurableFlow already proves that the core durability and failure-handling architecture works for a real vertical slice. It is strong on correctness boundaries and operational recovery.
+DurableFlow covers a real vertical slice of durable execution, failure handling, and operational recovery.
 
 It does not yet attempt to be a full Temporal-style workflow platform.
 
@@ -407,7 +407,7 @@ The main deliberate limitations today are:
 - the dashboard is operationally useful but still lightweight
 - replay exists, but there is no richer operator audit console yet
 
-Those gaps are intentional. The difficult infrastructure pieces were built first so later product features can sit on something solid.
+Those gaps are intentional. The infrastructure pieces came first so later workflow features have a stable base.
 
 ## What to read next
 
