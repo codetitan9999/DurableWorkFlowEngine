@@ -256,6 +256,7 @@ The codebase is built to be runnable and checkable, not just readable:
 - backend behavior is validated with `go test ./...`
 - the dashboard is validated with a production build via `npm --prefix apps/web run build`
 - the local stack includes OpenTelemetry, Prometheus, and Grafana so service behavior can be inspected in a realistic multi-service setup
+- benchmark scenarios and measurement guidance live in [docs/benchmarks.md](docs/benchmarks.md)
 
 The current tests focus on the areas where correctness matters most:
 
