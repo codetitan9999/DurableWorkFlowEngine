@@ -304,3 +304,116 @@ The current benchmark harness is enough to get honest first numbers. The next in
 - reclaimed-message counter
 
 Those would let future benchmark runs produce even stronger evidence with less manual interpretation.
+
+## Measured local results
+
+The following results were captured on `2026-06-05` against the local Docker-based stack. These are local validation numbers, not production-scale claims.
+
+### Single-worker baseline
+
+| Scenario | Workload | Throughput | Reported latency | Attempts/execution |
+| --- | --- | ---: | --- | ---: |
+| `success-linear` | `20` exec, concurrency `5` | `1.30 exec/s` | avg `3.72s`, p95 `3.88s` | `2` |
+| `success-linear` | `60` exec, concurrency `15` | `3.89 exec/s` | avg `3.73s`, p95 `3.89s` | `2` |
+| `success-deep-chain` (`5` steps) | `20` exec, concurrency `5` | `0.51 exec/s` | avg `9.53s`, p95 `9.84s` | `5` |
+| `success-deep-chain` (`10` steps) | `10` exec, concurrency `3` | `0.13 exec/s` | avg `19.73s`, p95 `19.99s` | `10` |
+| `retry-invalid-input` | `6` exec, concurrency `3`, `3` attempts, `1s` backoff | `0.53 exec/s` | avg `5.53s`, p95 `5.93s` | `3` |
+| `dead-letter-missing-handler` | `10` exec, concurrency `3` | `1.38 exec/s` | avg `1.58s`, p95 `1.83s` | `1` |
+| `replay-missing-handler` | `5` exec, concurrency `2` | `0.43 exec/s` | avg `3.77s`, p95 `3.93s` | `2` |
+
+### Default-shape saturation results
+
+The most useful default-path result came from pushing the same `2-step` happy-path workflow harder:
+
+| Scenario | Workload | Throughput | Reported latency |
+| --- | --- | ---: | --- |
+| `success-linear` | `120` exec, concurrency `30` | `4.99 exec/s` | avg `5.79s`, p95 `5.98s` |
+| `success-linear` | `240` exec, concurrency `60` | `4.99 exec/s` | avg `11.47s`, p95 `11.99s` |
+
+Interpretation:
+
+- with the default `OUTBOX_POLL_INTERVAL=2s`, the system plateaued almost exactly at `~5 exec/s`
+- increasing workload beyond that point did not increase throughput further
+- it did increase queueing latency substantially
+
+This matches the architecture:
+
+- the outbox publisher drains up to `20` pending rows per poll
+- the default poll interval is `2s`
+- a `2-step` workflow needs two dispatches per execution
+
+That implies a theoretical ceiling near:
+
+- `20 outbox rows / 2s = 10 dispatches/s`
+- `10 dispatches/s / 2 tasks per execution = ~5 exec/s`
+
+The measured plateau matched that model closely, which makes this one of the strongest "measured system understanding" results in the project.
+
+### Crash-recovery validation
+
+One benchmark run intentionally stopped the only worker mid-flight, waited long enough for Redis reclaim to matter, then restarted the worker.
+
+Result:
+
+- scenario: `success-linear`
+- workload: `20` executions, concurrency `5`
+- final outcome: all `20` executions still succeeded
+- throughput dropped to `0.29 exec/s`
+- reported latency avg rose to `16.77s`
+- reported latency p95 rose to `55.82s`
+- attempts per execution remained `2`
+
+What this shows:
+
+- work was delayed significantly by consumer failure and reclaim timing
+- work was not lost
+- execution semantics stayed correct after recovery
+
+### Multi-worker comparison
+
+Two extra worker processes were started against the same Redis consumer group and the `success-linear` benchmark was rerun.
+
+Observed result:
+
+- `success-linear`, `60` executions, concurrency `15`
+- throughput stayed effectively flat at `3.88 exec/s`
+- latency stayed effectively flat as well
+
+Interpretation:
+
+- the current bottleneck is likely upstream of worker parallelism
+- the main limiting factor in this local setup appears closer to outbox publish cadence and end-to-end orchestration timing than raw worker count
+
+### Tuned publisher comparison
+
+To confirm whether the default ceiling was architectural or just configuration-driven, the API was rerun once with:
+
+- `OUTBOX_POLL_INTERVAL=100ms`
+
+The repo code did not change for this comparison. Only the runtime poll interval changed.
+
+| Scenario | Workload | Throughput | Reported latency |
+| --- | --- | ---: | --- |
+| `success-linear` tuned | `240` exec, concurrency `60` | `97.30 exec/s` | avg `462ms`, p95 `524ms` |
+| `success-linear` tuned | `1000` exec, concurrency `200` | `98.92 exec/s` | avg `1.80s`, p95 `1.97s` |
+| `success-linear` tuned | `2000` exec, concurrency `400` | `99.06 exec/s` | avg `3.70s`, p95 `3.96s` |
+| `retry-invalid-input` tuned | `6` exec, concurrency `3`, `3` attempts, `1s` backoff | `1.25 exec/s` | avg `2.27s`, p95 `2.28s` |
+
+Interpretation:
+
+- the `~5 exec/s` default plateau was mostly publisher-cadence bound
+- reducing the outbox poll interval by `20x` increased measured happy-path throughput by roughly `20x`
+- the next observed ceiling under local load was roughly `~99 exec/s` for the `2-step` workflow
+- persisted retries also became much closer to the configured backoff floor once outbox cadence was no longer the dominant delay
+
+This is a strong result because it shows:
+
+- the system was benchmarked enough to expose its first bottleneck
+- the bottleneck hypothesis was tested with a controlled configuration change
+- the resulting throughput shift matched the architectural expectation
+
+### Important benchmarking note
+
+Benchmarking exposed a real bug in the retry scheduler path: due retries could become stuck because `EnqueueDueTaskRetries` kept a query cursor open and then attempted additional `Exec` calls inside the same transaction, causing repeated `conn busy` failures in the outbox loop.
+
+That issue was fixed before the persisted-retry benchmark above was recorded. This is one of the strongest kinds of benchmark evidence: the benchmark suite did not just produce numbers, it surfaced and helped validate a real correctness bug in the retry path.
