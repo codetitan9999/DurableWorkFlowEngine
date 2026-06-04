@@ -553,6 +553,12 @@ func (s *Store) EnqueueDueTaskRetries(ctx context.Context, limit int) (int, erro
 	}
 	defer tx.Rollback(ctx)
 
+	type dueRetryTask struct {
+		taskID      string
+		executionID string
+		handlerKey  string
+	}
+
 	rows, err := tx.Query(ctx, `
 		SELECT id, workflow_execution_id, handler_key
 		FROM task_instances
@@ -567,25 +573,31 @@ func (s *Store) EnqueueDueTaskRetries(ctx context.Context, limit int) (int, erro
 	if err != nil {
 		return 0, err
 	}
-	count := 0
-	for rows.Next() {
-		var taskID string
-		var executionID string
-		var handlerKey string
-		if err := rows.Scan(&taskID, &executionID, &handlerKey); err != nil {
-			rows.Close()
-			return count, err
-		}
-		count++
 
+	var dueTasks []dueRetryTask
+	for rows.Next() {
+		var item dueRetryTask
+		if err := rows.Scan(&item.taskID, &item.executionID, &item.handlerKey); err != nil {
+			rows.Close()
+			return len(dueTasks), err
+		}
+		dueTasks = append(dueTasks, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return len(dueTasks), err
+	}
+	rows.Close()
+
+	for _, item := range dueTasks {
 		payload, err := json.Marshal(domain.DispatchTaskPayload{
-			TaskID:      taskID,
-			ExecutionID: executionID, // Not needed for dispatching the task, worker will look up execution ID by task ID
-			HandlerKey:  handlerKey,  // Not needed for dispatching the task, worker will look up handler key by task ID
+			TaskID:      item.taskID,
+			ExecutionID: item.executionID,
+			HandlerKey:  item.handlerKey,
 		})
 		if err != nil {
-			rows.Close()
-			return count, err
+			return len(dueTasks), err
 		}
 
 		if _, err := tx.Exec(ctx, `
@@ -597,9 +609,8 @@ func (s *Store) EnqueueDueTaskRetries(ctx context.Context, limit int) (int, erro
 				available_at
 			)
 			VALUES ($1, $2, $3, $4, NOW())
-		`, "task_instance", taskID, "task.dispatch", payload); err != nil {
-			rows.Close()
-			return count, err
+		`, "task_instance", item.taskID, "task.dispatch", payload); err != nil {
+			return len(dueTasks), err
 		}
 
 		if _, err := tx.Exec(ctx, `
@@ -607,21 +618,15 @@ func (s *Store) EnqueueDueTaskRetries(ctx context.Context, limit int) (int, erro
 			SET next_run_at = NULL,
 				updated_at = NOW()
 			WHERE id = $1
-		`, taskID); err != nil {
-			rows.Close()
-			return count, err
+		`, item.taskID); err != nil {
+			return len(dueTasks), err
 		}
 	}
 
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return count, err
-	}
-
 	if err := tx.Commit(ctx); err != nil {
-		return count, err
+		return len(dueTasks), err
 	}
-	return count, nil
+	return len(dueTasks), nil
 }
 func (s *Store) ScheduleTaskRetry(ctx context.Context, taskID, attemptID, errorText string, nextRunAt time.Time) error {
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
