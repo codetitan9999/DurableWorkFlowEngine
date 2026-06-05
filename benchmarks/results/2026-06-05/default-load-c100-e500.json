@@ -1,0 +1,142 @@
+{
+  "label": "default-load-c100-e500",
+  "captured_at": "2026-06-05T05:44:39.79078Z",
+  "scenario": "success-linear",
+  "executions": 500,
+  "concurrency": 100,
+  "repeat": 2,
+  "poll_interval": 200000000,
+  "timeout": 90000000000,
+  "max_attempts": 3,
+  "backoff_seconds": 1,
+  "chain_length": 5,
+  "api_base_url": "http://localhost:8080",
+  "go_version": "go1.26.3",
+  "hostname": "srees-MacBook-Pro.local",
+  "results": [
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "ba91fc19-e448-42c4-b7f0-74ddc20a9059",
+      "executions": 500,
+      "concurrency": 100,
+      "overall_elapsed": 99825829792,
+      "throughput_per_second": 5.008723704494264,
+      "succeeded": 500,
+      "failed": 0,
+      "observed_latency": {
+        "count": 500,
+        "min": 11810460500,
+        "avg": 19168300678,
+        "p50": 20003914667,
+        "p95": 20018005125,
+        "p99": 20135235417,
+        "max": 20146482667
+      },
+      "reported_latency": {
+        "count": 500,
+        "min": 11652581000,
+        "avg": 18994157066,
+        "p50": 19828953000,
+        "p95": 19868401000,
+        "p99": 19876532000,
+        "max": 19986476000
+      },
+      "attempts_per_execution": {
+        "count": 500,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "23b41d0a-1d6f-434b-ad87-778355dfe50d",
+      "executions": 500,
+      "concurrency": 100,
+      "overall_elapsed": 99878800583,
+      "throughput_per_second": 5.006067324411815,
+      "succeeded": 500,
+      "failed": 0,
+      "observed_latency": {
+        "count": 500,
+        "min": 12005189000,
+        "avg": 19185495256,
+        "p50": 20005346375,
+        "p95": 20021635209,
+        "p99": 20053423708,
+        "max": 20211052583
+      },
+      "reported_latency": {
+        "count": 500,
+        "min": 11834007000,
+        "avg": 19046289958,
+        "p50": 19819426000,
+        "p95": 19988209000,
+        "p99": 19996897000,
+        "max": 20006600000
+      },
+      "attempts_per_execution": {
+        "count": 500,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    }
+  ],
+  "aggregate": {
+    "repeat_count": 2,
+    "succeeded_runs": 2,
+    "failed_runs": 0,
+    "throughput_per_second": {
+      "count": 2,
+      "min": 5.006067324411815,
+      "avg": 5.007395514453039,
+      "p50": 5.006067324411815,
+      "p95": 5.008723704494264,
+      "p99": 5.008723704494264,
+      "max": 5.008723704494264
+    },
+    "overall_elapsed": {
+      "count": 2,
+      "min": 99825829792,
+      "avg": 99852315187,
+      "p50": 99825829792,
+      "p95": 99878800583,
+      "p99": 99878800583,
+      "max": 99878800583
+    },
+    "reported_latency_p95": {
+      "count": 2,
+      "min": 19868401000,
+      "avg": 19928305000,
+      "p50": 19868401000,
+      "p95": 19988209000,
+      "p99": 19988209000,
+      "max": 19988209000
+    },
+    "reported_latency_avg": {
+      "count": 2,
+      "min": 18994157066,
+      "avg": 19020223512,
+      "p50": 18994157066,
+      "p95": 19046289958,
+      "p99": 19046289958,
+      "max": 19046289958
+    },
+    "observed_latency_p95": {
+      "count": 2,
+      "min": 20018005125,
+      "avg": 20019820167,
+      "p50": 20018005125,
+      "p95": 20021635209,
+      "p99": 20021635209,
+      "max": 20021635209
+    }
+  }
+}

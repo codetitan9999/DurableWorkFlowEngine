@@ -1,0 +1,142 @@
+{
+  "label": "smoke-suite",
+  "captured_at": "2026-06-05T05:33:23.815244Z",
+  "scenario": "success-linear",
+  "executions": 10,
+  "concurrency": 2,
+  "repeat": 2,
+  "poll_interval": 200000000,
+  "timeout": 30000000000,
+  "max_attempts": 3,
+  "backoff_seconds": 1,
+  "chain_length": 5,
+  "api_base_url": "http://localhost:8080",
+  "go_version": "go1.26.3",
+  "hostname": "srees-MacBook-Pro.local",
+  "results": [
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "97421762-2895-4f13-acf6-468c97f2e34c",
+      "executions": 10,
+      "concurrency": 2,
+      "overall_elapsed": 19233820834,
+      "throughput_per_second": 0.5199174977403764,
+      "succeeded": 10,
+      "failed": 0,
+      "observed_latency": {
+        "count": 10,
+        "min": 3210592166,
+        "avg": 3846643241,
+        "p50": 4003782083,
+        "p95": 4006235709,
+        "p99": 4006235709,
+        "max": 4006235709
+      },
+      "reported_latency": {
+        "count": 10,
+        "min": 3181637000,
+        "avg": 3817657400,
+        "p50": 3974444000,
+        "p95": 3980444000,
+        "p99": 3980444000,
+        "max": 3980444000
+      },
+      "attempts_per_execution": {
+        "count": 10,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "36efa382-2c61-463a-ab67-9313361a49f7",
+      "executions": 10,
+      "concurrency": 2,
+      "overall_elapsed": 20042514208,
+      "throughput_per_second": 0.49893939932987474,
+      "succeeded": 10,
+      "failed": 0,
+      "observed_latency": {
+        "count": 10,
+        "min": 4006697958,
+        "avg": 4008472774,
+        "p50": 4007899916,
+        "p95": 4010413000,
+        "p99": 4010413000,
+        "max": 4010413000
+      },
+      "reported_latency": {
+        "count": 10,
+        "min": 3925980000,
+        "avg": 3944993500,
+        "p50": 3943156000,
+        "p95": 3964037000,
+        "p99": 3964037000,
+        "max": 3964037000
+      },
+      "attempts_per_execution": {
+        "count": 10,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    }
+  ],
+  "aggregate": {
+    "repeat_count": 2,
+    "succeeded_runs": 2,
+    "failed_runs": 0,
+    "throughput_per_second": {
+      "count": 2,
+      "min": 0.49893939932987474,
+      "avg": 0.5094284485351256,
+      "p50": 0.49893939932987474,
+      "p95": 0.5199174977403764,
+      "p99": 0.5199174977403764,
+      "max": 0.5199174977403764
+    },
+    "overall_elapsed": {
+      "count": 2,
+      "min": 19233820834,
+      "avg": 19638167521,
+      "p50": 19233820834,
+      "p95": 20042514208,
+      "p99": 20042514208,
+      "max": 20042514208
+    },
+    "reported_latency_p95": {
+      "count": 2,
+      "min": 3964037000,
+      "avg": 3972240500,
+      "p50": 3964037000,
+      "p95": 3980444000,
+      "p99": 3980444000,
+      "max": 3980444000
+    },
+    "reported_latency_avg": {
+      "count": 2,
+      "min": 3817657400,
+      "avg": 3881325450,
+      "p50": 3817657400,
+      "p95": 3944993500,
+      "p99": 3944993500,
+      "max": 3944993500
+    },
+    "observed_latency_p95": {
+      "count": 2,
+      "min": 4006235709,
+      "avg": 4008324354,
+      "p50": 4006235709,
+      "p95": 4010413000,
+      "p99": 4010413000,
+      "max": 4010413000
+    }
+  }
+}
