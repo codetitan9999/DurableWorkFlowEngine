@@ -11,6 +11,8 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -89,6 +91,36 @@ type benchmarkResult struct {
 	Runs                 []executionRun `json:"runs,omitempty"`
 }
 
+type benchmarkSuiteResult struct {
+	Label        string            `json:"label,omitempty"`
+	CapturedAt   time.Time         `json:"captured_at"`
+	Scenario     string            `json:"scenario"`
+	Executions   int               `json:"executions"`
+	Concurrency  int               `json:"concurrency"`
+	Repeat       int               `json:"repeat"`
+	PollInterval time.Duration     `json:"poll_interval"`
+	Timeout      time.Duration     `json:"timeout"`
+	MaxAttempts  int               `json:"max_attempts"`
+	Backoff      int               `json:"backoff_seconds"`
+	ChainLength  int               `json:"chain_length"`
+	APIBaseURL   string            `json:"api_base_url"`
+	GoVersion    string            `json:"go_version"`
+	Hostname     string            `json:"hostname,omitempty"`
+	Results      []benchmarkResult `json:"results"`
+	Aggregate    suiteAggregate    `json:"aggregate"`
+}
+
+type suiteAggregate struct {
+	RepeatCount        int            `json:"repeat_count"`
+	SucceededRuns      int            `json:"succeeded_runs"`
+	FailedRuns         int            `json:"failed_runs"`
+	Throughput         floatSummary   `json:"throughput_per_second"`
+	OverallElapsed     latencySummary `json:"overall_elapsed"`
+	ReportedLatencyP95 latencySummary `json:"reported_latency_p95"`
+	ReportedLatencyAvg latencySummary `json:"reported_latency_avg"`
+	ObservedLatencyP95 latencySummary `json:"observed_latency_p95"`
+}
+
 type latencySummary struct {
 	Count int           `json:"count"`
 	Min   time.Duration `json:"min"`
@@ -109,6 +141,16 @@ type numberSummary struct {
 	Max   int     `json:"max"`
 }
 
+type floatSummary struct {
+	Count int     `json:"count"`
+	Min   float64 `json:"min"`
+	Avg   float64 `json:"avg"`
+	P50   float64 `json:"p50"`
+	P95   float64 `json:"p95"`
+	P99   float64 `json:"p99"`
+	Max   float64 `json:"max"`
+}
+
 type runner struct {
 	client       *http.Client
 	apiBaseURL   string
@@ -127,8 +169,11 @@ func main() {
 		maxAttempts  = flag.Int("max-attempts", 3, "Task max_attempts for generated workflow definition")
 		backoff      = flag.Int("backoff-seconds", 1, "Task backoff_seconds for generated workflow definition")
 		chainLength  = flag.Int("chain-length", 5, "Number of tasks in deep-chain scenario")
+		repeat       = flag.Int("repeat", 1, "Number of repeated benchmark runs with the same configuration")
 		includeRuns  = flag.Bool("include-runs", false, "Include per-execution results in JSON output")
 		jsonOutput   = flag.Bool("json", false, "Emit machine-readable JSON output")
+		outputFile   = flag.String("output-file", "", "Optional path for JSON output")
+		label        = flag.String("label", "", "Optional label stored in JSON output")
 	)
 	flag.Parse()
 
@@ -147,6 +192,9 @@ func main() {
 	if *chainLength < 2 {
 		exitf("chain-length must be at least 2")
 	}
+	if *repeat <= 0 {
+		exitf("repeat must be greater than 0")
+	}
 
 	spec, err := buildScenarioSpec(*scenario, *maxAttempts, *backoff, *chainLength)
 	if err != nil {
@@ -163,35 +211,60 @@ func main() {
 	}
 
 	ctx := context.Background()
-	workflowName := fmt.Sprintf("bench-%s-%d", *scenario, time.Now().UTC().UnixNano())
-	workflowID, err := r.createWorkflow(ctx, workflowName, spec.Description, spec.Definition)
-	if err != nil {
-		exitf("create benchmark workflow: %v", err)
+	results := make([]benchmarkResult, 0, *repeat)
+	for i := 0; i < *repeat; i++ {
+		workflowName := fmt.Sprintf("bench-%s-%d-%d", *scenario, time.Now().UTC().UnixNano(), i+1)
+		workflowID, err := r.createWorkflow(ctx, workflowName, spec.Description, spec.Definition)
+		if err != nil {
+			exitf("create benchmark workflow: %v", err)
+		}
+
+		result, err := r.runBenchmark(ctx, benchmarkConfig{
+			Scenario:             *scenario,
+			WorkflowDefinitionID: workflowID,
+			Executions:           *executions,
+			Concurrency:          *concurrency,
+			IncludeRuns:          *includeRuns,
+			Input:                spec.Input,
+			ReplayAfterTerminal:  spec.ReplayAfterTerminal,
+		})
+		if err != nil {
+			exitf("run benchmark: %v", err)
+		}
+		results = append(results, result)
 	}
 
-	result, err := r.runBenchmark(ctx, benchmarkConfig{
-		Scenario:             *scenario,
-		WorkflowDefinitionID: workflowID,
-		Executions:           *executions,
-		Concurrency:          *concurrency,
-		IncludeRuns:          *includeRuns,
-		Input:                spec.Input,
-		ReplayAfterTerminal:  spec.ReplayAfterTerminal,
+	suite := buildSuiteResult(results, suiteConfig{
+		Label:        strings.TrimSpace(*label),
+		CapturedAt:   time.Now().UTC(),
+		Scenario:     *scenario,
+		Executions:   *executions,
+		Concurrency:  *concurrency,
+		Repeat:       *repeat,
+		PollInterval: *pollInterval,
+		Timeout:      *timeout,
+		MaxAttempts:  *maxAttempts,
+		Backoff:      *backoff,
+		ChainLength:  *chainLength,
+		APIBaseURL:   r.apiBaseURL,
 	})
-	if err != nil {
-		exitf("run benchmark: %v", err)
+
+	if *outputFile != "" {
+		if err := writeJSONFile(*outputFile, suite); err != nil {
+			exitf("write output file: %v", err)
+		}
 	}
 
 	if *jsonOutput {
 		encoder := json.NewEncoder(os.Stdout)
 		encoder.SetIndent("", "  ")
-		if err := encoder.Encode(result); err != nil {
+		if err := encoder.Encode(suite); err != nil {
 			exitf("encode result: %v", err)
 		}
 		return
 	}
 
-	printHumanSummary(result)
+	printSuiteSummary(suite)
 }
 
 type benchmarkConfig struct {
@@ -202,6 +275,21 @@ type benchmarkConfig struct {
 	IncludeRuns          bool
 	Input                json.RawMessage
 	ReplayAfterTerminal  bool
+}
+
+type suiteConfig struct {
+	Label        string
+	CapturedAt   time.Time
+	Scenario     string
+	Executions   int
+	Concurrency  int
+	Repeat       int
+	PollInterval time.Duration
+	Timeout      time.Duration
+	MaxAttempts  int
+	Backoff      int
+	ChainLength  int
+	APIBaseURL   string
 }
 
 func (r *runner) runBenchmark(ctx context.Context, cfg benchmarkConfig) (benchmarkResult, error) {
@@ -673,11 +761,39 @@ func summarizeInts(values []int) numberSummary {
 	}
 }
 
+func summarizeFloats(values []float64) floatSummary {
+	if len(values) == 0 {
+		return floatSummary{}
+	}
+
+	sorted := append([]float64(nil), values...)
+	sort.Float64s(sorted)
+
+	var total float64
+	for _, value := range sorted {
+		total += value
+	}
+
+	return floatSummary{
+		Count: len(sorted),
+		Min:   sorted[0],
+		Avg:   total / float64(len(sorted)),
+		P50:   percentileFloat(sorted, 0.50),
+		P95:   percentileFloat(sorted, 0.95),
+		P99:   percentileFloat(sorted, 0.99),
+		Max:   sorted[len(sorted)-1],
+	}
+}
+
 func percentileDuration(sorted []time.Duration, quantile float64) time.Duration {
 	return sorted[percentileIndex(len(sorted), quantile)]
 }
 
 func percentileInt(sorted []int, quantile float64) int {
+	return sorted[percentileIndex(len(sorted), quantile)]
+}
+
+func percentileFloat(sorted []float64, quantile float64) float64 {
 	return sorted[percentileIndex(len(sorted), quantile)]
 }
 
@@ -695,24 +811,43 @@ func percentileIndex(length int, quantile float64) int {
 	return index
 }
 
-func printHumanSummary(result benchmarkResult) {
-	fmt.Printf("Scenario: %s\n", result.Scenario)
-	fmt.Printf("Workflow definition: %s\n", result.WorkflowDefinitionID)
-	fmt.Printf("Executions: %d\n", result.Executions)
-	fmt.Printf("Concurrency: %d\n", result.Concurrency)
-	fmt.Printf("Succeeded: %d\n", result.Succeeded)
-	fmt.Printf("Failed: %d\n", result.Failed)
-	fmt.Printf("Overall elapsed: %s\n", result.OverallElapsed)
-	fmt.Printf("Throughput: %.2f executions/sec\n", result.ThroughputPerSecond)
+func printSuiteSummary(suite benchmarkSuiteResult) {
+	fmt.Printf("Scenario: %s\n", suite.Scenario)
+	fmt.Printf("Executions per run: %d\n", suite.Executions)
+	fmt.Printf("Concurrency: %d\n", suite.Concurrency)
+	fmt.Printf("Repeat: %d\n", suite.Repeat)
+	if suite.Label != "" {
+		fmt.Printf("Label: %s\n", suite.Label)
+	}
 	fmt.Println()
-	fmt.Println("Observed latency (trigger -> terminal snapshot)")
-	printLatencySummary(result.ObservedLatency)
-	fmt.Println()
-	fmt.Println("Reported engine latency (started_at -> completed_at)")
-	printLatencySummary(result.ReportedLatency)
-	fmt.Println()
-	fmt.Println("Attempts per execution")
-	printNumberSummary(result.AttemptsPerExecution)
+
+	for i, result := range suite.Results {
+		fmt.Printf("Run %d\n", i+1)
+		fmt.Printf("  Workflow definition: %s\n", result.WorkflowDefinitionID)
+		fmt.Printf("  Succeeded: %d\n", result.Succeeded)
+		fmt.Printf("  Failed: %d\n", result.Failed)
+		fmt.Printf("  Overall elapsed: %s\n", result.OverallElapsed)
+		fmt.Printf("  Throughput: %.2f executions/sec\n", result.ThroughputPerSecond)
+		fmt.Printf("  Reported latency p95: %s\n", result.ReportedLatency.P95)
+		fmt.Printf("  Attempts/execution avg: %.2f\n", result.AttemptsPerExecution.Avg)
+		fmt.Println()
+	}
+
+	fmt.Println("Aggregate")
+	fmt.Printf("  Successful runs: %d\n", suite.Aggregate.SucceededRuns)
+	fmt.Printf("  Failed runs: %d\n", suite.Aggregate.FailedRuns)
+	fmt.Printf("  Throughput avg: %.2f exec/s (min %.2f, p95 %.2f, max %.2f)\n",
+		suite.Aggregate.Throughput.Avg,
+		suite.Aggregate.Throughput.Min,
+		suite.Aggregate.Throughput.P95,
+		suite.Aggregate.Throughput.Max,
+	)
+	fmt.Printf("  Reported latency p95 avg: %s (min %s, max %s)\n",
+		suite.Aggregate.ReportedLatencyP95.Avg,
+		suite.Aggregate.ReportedLatencyP95.Min,
+		suite.Aggregate.ReportedLatencyP95.Max,
+	)
+	fmt.Printf("  Overall elapsed avg: %s\n", suite.Aggregate.OverallElapsed.Avg)
 }
 
 func printLatencySummary(summary latencySummary) {
@@ -733,6 +868,68 @@ func printNumberSummary(summary numberSummary) {
 	fmt.Printf("  p95:   %d\n", summary.P95)
 	fmt.Printf("  p99:   %d\n", summary.P99)
 	fmt.Printf("  max:   %d\n", summary.Max)
+}
+
+func buildSuiteResult(results []benchmarkResult, cfg suiteConfig) benchmarkSuiteResult {
+	hostname, _ := os.Hostname()
+	suite := benchmarkSuiteResult{
+		Label:        cfg.Label,
+		CapturedAt:   cfg.CapturedAt,
+		Scenario:     cfg.Scenario,
+		Executions:   cfg.Executions,
+		Concurrency:  cfg.Concurrency,
+		Repeat:       cfg.Repeat,
+		PollInterval: cfg.PollInterval,
+		Timeout:      cfg.Timeout,
+		MaxAttempts:  cfg.MaxAttempts,
+		Backoff:      cfg.Backoff,
+		ChainLength:  cfg.ChainLength,
+		APIBaseURL:   cfg.APIBaseURL,
+		GoVersion:    runtime.Version(),
+		Hostname:     hostname,
+		Results:      results,
+	}
+
+	throughputs := make([]float64, 0, len(results))
+	overallElapsed := make([]time.Duration, 0, len(results))
+	reportedP95 := make([]time.Duration, 0, len(results))
+	reportedAvg := make([]time.Duration, 0, len(results))
+	observedP95 := make([]time.Duration, 0, len(results))
+	for _, result := range results {
+		throughputs = append(throughputs, result.ThroughputPerSecond)
+		overallElapsed = append(overallElapsed, result.OverallElapsed)
+		reportedP95 = append(reportedP95, result.ReportedLatency.P95)
+		reportedAvg = append(reportedAvg, result.ReportedLatency.Avg)
+		observedP95 = append(observedP95, result.ObservedLatency.P95)
+		if result.Failed == 0 {
+			suite.Aggregate.SucceededRuns++
+		} else {
+			suite.Aggregate.FailedRuns++
+		}
+	}
+
+	suite.Aggregate.RepeatCount = len(results)
+	suite.Aggregate.Throughput = summarizeFloats(throughputs)
+	suite.Aggregate.OverallElapsed = summarizeDurations(overallElapsed)
+	suite.Aggregate.ReportedLatencyP95 = summarizeDurations(reportedP95)
+	suite.Aggregate.ReportedLatencyAvg = summarizeDurations(reportedAvg)
+	suite.Aggregate.ObservedLatencyP95 = summarizeDurations(observedP95)
+	return suite
+}
+
+func writeJSONFile(path string, value any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(value)
 }
 
 func exitf(format string, args ...any) {
