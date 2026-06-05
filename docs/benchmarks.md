@@ -526,11 +526,43 @@ sum(rate(durableflow_dispatch_events_total[5m])) by (service, status)
 sum(rate(durableflow_tasks_processed_total[5m])) by (service, handler, status)
 ```
 
+```promql
+histogram_quantile(0.95, sum(rate(durableflow_http_request_duration_seconds_bucket[5m])) by (le, service))
+```
+
+```promql
+histogram_quantile(0.95, sum(rate(durableflow_task_processing_duration_seconds_bucket[5m])) by (le, handler, status))
+```
+
+```promql
+sum(rate(durableflow_retries_scheduled_total[5m])) by (handler)
+```
+
+```promql
+sum(rate(durableflow_retries_enqueued_total[5m])) by (service)
+```
+
+```promql
+sum(rate(durableflow_dead_lettered_tasks_total[5m])) by (reason)
+```
+
+```promql
+sum(rate(durableflow_task_replays_total[5m])) by (service)
+```
+
+```promql
+sum(rate(durableflow_reclaimed_messages_total[5m])) by (stream, group)
+```
+
 These help validate:
 
 - execution creation rate
 - outbox publish behavior
 - worker success/retry/failure mix
+- HTTP latency behavior by service
+- task processing latency by handler/result
+- retry scheduling and replay activity
+- reclaim activity during failure-injection runs
 
 ## Using the results
 

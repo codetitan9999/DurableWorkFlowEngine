@@ -260,6 +260,25 @@ At this point, the current measurements suggest:
 
 The full methodology, scenario list, and measured results live in [docs/benchmarks.md](docs/benchmarks.md).
 
+### Reproducing benchmark runs
+
+The repo includes a small benchmark runner plus helper scripts:
+
+- [scripts/run_bench_suite.sh](scripts/run_bench_suite.sh)
+- [scripts/generate_benchmark_charts.sh](scripts/generate_benchmark_charts.sh)
+- [benchmarks/results/2026-06-05/charts.md](benchmarks/results/2026-06-05/charts.md)
+
+Useful commands:
+
+```bash
+make bench-suite
+make bench-charts
+make metrics-api
+make metrics-worker
+```
+
+The generated chart report turns one results directory of JSON artifacts into a small Mermaid-based summary that is easy to review in GitHub.
+
 ## Dashboard walkthrough
 
 The dashboard is intentionally small, but each panel maps directly to a core part of the system:
@@ -360,6 +379,14 @@ The current tests focus on the areas where correctness matters most:
 - worker success, retry, and dead-letter branches
 - handler-level idempotency behavior
 - Redis consumer-group reclaim and queue decoding helpers
+
+The local Grafana dashboard now includes:
+
+- HTTP request rate and p95 latency
+- task processing rate and p95 latency
+- retry scheduling and retry enqueue rate
+- dead-letter, replay, and reclaimed-message rate
+- outbox dispatch rate
 
 ### Local endpoints
 
