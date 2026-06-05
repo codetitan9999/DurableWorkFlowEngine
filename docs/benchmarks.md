@@ -28,6 +28,11 @@ These are useful implementation and correctness signals, but they do not say muc
 
 The repo includes a small benchmark runner at [cmd/bench/main.go](../cmd/bench/main.go).
 
+For repeated suites and report generation, the repo also includes:
+
+- [scripts/run_bench_suite.sh](../scripts/run_bench_suite.sh)
+- [scripts/generate_benchmark_charts.sh](../scripts/generate_benchmark_charts.sh)
+
 It does three things:
 
 1. creates a benchmark workflow definition through the real API
@@ -64,6 +69,18 @@ That produces one JSON file containing:
 - run configuration
 - per-run summaries
 - aggregate throughput and latency summaries across repeats
+
+To run the default suite with the current script:
+
+```bash
+./scripts/run_bench_suite.sh
+```
+
+To generate a markdown chart report from one result directory:
+
+```bash
+./scripts/generate_benchmark_charts.sh benchmarks/results/2026-06-05
+```
 
 ## Benchmark suite checklist
 
