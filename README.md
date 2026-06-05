@@ -155,6 +155,8 @@ This is one of the main correctness checks in the project.
 
 The stack is meant to run as a reproducible local distributed system, not as a set of disconnected code samples. Docker Compose brings up the API, worker, web dashboard, Postgres, Redis, and observability services together so retry behavior, replay, crash recovery, and inspection can be exercised end to end.
 
+For scaling benchmarks, the compose file also includes a `worker-bench` profile that starts extra consumers in the same Redis group without publishing additional host ports.
+
 ### Core persistence model
 
 - `workflow_definitions`
@@ -213,13 +215,47 @@ One run intentionally stopped the only worker mid-flight, waited through the rec
 
 This shows that consumer failure can delay work significantly, while the system still recovers without losing execution correctness.
 
+### Soak and mixed workload checks
+
+The default `100 exec / 20 concurrency` happy-path shape was also repeated `30` times as a soak run:
+
+- throughput avg stayed at `5.01 exec/s`
+- reported latency p95 avg stayed at `3.95s`
+- first-5 vs last-5 run averages stayed nearly flat
+
+A mixed workload run combined success, retry, dead-letter, and replay traffic in parallel:
+
+- happy-path throughput dropped to `3.64 exec/s`
+- happy-path reported p95 stayed near the normal range at `3.90s`
+
+That suggests mixed failure traffic reduced the share of throughput available to the happy path before it caused a major latency spike.
+
+### Multi-worker benchmarks
+
+The repo now includes a scale-only `worker-bench` profile for multi-worker runs. With the API kept in the tuned `OUTBOX_POLL_INTERVAL=100ms` shape:
+
+- `1000` executions at concurrency `200` with `1` worker averaged `98.95 exec/s`
+- the same workload with `3` workers averaged `99.39 exec/s`
+
+At this workload and with the built-in handlers, extra workers did not materially change throughput.
+
+One extra worker was also stopped during a tuned run while the rest of the consumer group stayed alive:
+
+- `500` executions at concurrency `100`
+- throughput stayed at `98.14 exec/s`
+- reported latency p95 stayed under `1s`
+
+That is very different from losing the only worker, and it shows the consumer group can absorb partial worker loss without a large drop in throughput.
+
 ### Current boundary story
 
 At this point, the current measurements suggest:
 
 - default-shape throughput is outbox-cadence bound at about `~5 exec/s`
 - tuned happy-path throughput sustains about `~99 exec/s` in the local environment for the current `2-step` workflow
-- adding more workers did not materially improve the default-path benchmark, which suggests the first bottleneck is upstream of worker parallelism
+- the default happy-path shape stays stable over repeated soak runs without meaningful drift in throughput or tail latency
+- adding more workers did not materially improve the tuned happy-path benchmark for the current handlers, which suggests the next bottleneck is still upstream of raw worker parallelism
+- mixed success, retry, dead-letter, and replay traffic reduces happy-path throughput before it causes a large p95 latency jump
 - under extremely aggressive snapshot polling, the control-plane read path becomes a separate limit before the workflow engine itself fails
 
 The full methodology, scenario list, and measured results live in [docs/benchmarks.md](docs/benchmarks.md).
