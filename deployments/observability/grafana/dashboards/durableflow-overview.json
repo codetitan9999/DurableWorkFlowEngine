@@ -27,11 +27,139 @@
       "id": 1,
       "targets": [
         {
-          "expr": "sum(rate(durableflow_http_requests_total[5m])) by (service, route, method)",
+          "expr": "sum(rate(durableflow_http_requests_total[5m])) by (service, route, method, status_code)",
+          "legendFormat": "{{service}} {{method}} {{route}} {{status_code}}",
           "refId": "A"
         }
       ],
       "title": "HTTP Request Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(durableflow_http_request_duration_seconds_bucket[5m])) by (le, service))",
+          "legendFormat": "{{service}} p95",
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP Request Latency P95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum(rate(durableflow_tasks_processed_total[5m])) by (service, handler, status)",
+          "legendFormat": "{{service}} {{handler}} {{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Task Processing Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(durableflow_task_processing_duration_seconds_bucket[5m])) by (le, handler, status))",
+          "legendFormat": "{{handler}} {{status}} p95",
+          "refId": "A"
+        }
+      ],
+      "title": "Task Processing Latency P95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "sum(rate(durableflow_retries_scheduled_total[5m])) by (handler)",
+          "legendFormat": "scheduled {{handler}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(durableflow_retries_enqueued_total[5m])) by (service)",
+          "legendFormat": "enqueued {{service}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Retry Scheduling and Enqueue Rate",
       "type": "timeseries"
     },
     {
@@ -51,16 +179,82 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 0
+        "y": 16
       },
-      "id": 2,
+      "id": 6,
       "targets": [
         {
-          "expr": "sum(rate(durableflow_tasks_processed_total[5m])) by (service, handler, status)",
+          "expr": "sum(rate(durableflow_dead_lettered_tasks_total[5m])) by (reason)",
+          "legendFormat": "dead-letter {{reason}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(durableflow_task_replays_total[5m])) by (service)",
+          "legendFormat": "replay {{service}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Dead-letter and Replay Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 7,
+      "targets": [
+        {
+          "expr": "sum(rate(durableflow_reclaimed_messages_total[5m])) by (stream, group)",
+          "legendFormat": "{{stream}} {{group}}",
           "refId": "A"
         }
       ],
-      "title": "Task Processing Rate",
+      "title": "Reclaimed Pending Message Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 8,
+      "targets": [
+        {
+          "expr": "sum(rate(durableflow_dispatch_events_total[5m])) by (service, status)",
+          "legendFormat": "{{service}} {{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Outbox Dispatch Rate",
       "type": "timeseries"
     }
   ],
@@ -79,5 +273,5 @@
   },
   "title": "DurableFlow Overview",
   "uid": "durableflow-overview",
-  "version": 1
+  "version": 2
 }
