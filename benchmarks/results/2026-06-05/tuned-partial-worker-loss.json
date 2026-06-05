@@ -1,0 +1,105 @@
+{
+  "label": "tuned-partial-worker-loss",
+  "captured_at": "2026-06-05T06:23:27.254208Z",
+  "scenario": "success-linear",
+  "executions": 500,
+  "concurrency": 100,
+  "repeat": 1,
+  "poll_interval": 200000000,
+  "timeout": 120000000000,
+  "max_attempts": 3,
+  "backoff_seconds": 1,
+  "chain_length": 5,
+  "api_base_url": "http://localhost:8080",
+  "go_version": "go1.26.3",
+  "hostname": "srees-MacBook-Pro.local",
+  "results": [
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "5649a5b3-05f9-4b56-ac3c-7a51baecd2c9",
+      "executions": 500,
+      "concurrency": 100,
+      "overall_elapsed": 5094736084,
+      "throughput_per_second": 98.14051047123877,
+      "succeeded": 500,
+      "failed": 0,
+      "observed_latency": {
+        "count": 500,
+        "min": 627546958,
+        "avg": 982088882,
+        "p50": 1006142583,
+        "p95": 1048522958,
+        "p99": 1054610292,
+        "max": 1055722500
+      },
+      "reported_latency": {
+        "count": 500,
+        "min": 557428000,
+        "avg": 852051498,
+        "p50": 848883000,
+        "p95": 942725000,
+        "p99": 951218000,
+        "max": 953247000
+      },
+      "attempts_per_execution": {
+        "count": 500,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    }
+  ],
+  "aggregate": {
+    "repeat_count": 1,
+    "succeeded_runs": 1,
+    "failed_runs": 0,
+    "throughput_per_second": {
+      "count": 1,
+      "min": 98.14051047123877,
+      "avg": 98.14051047123877,
+      "p50": 98.14051047123877,
+      "p95": 98.14051047123877,
+      "p99": 98.14051047123877,
+      "max": 98.14051047123877
+    },
+    "overall_elapsed": {
+      "count": 1,
+      "min": 5094736084,
+      "avg": 5094736084,
+      "p50": 5094736084,
+      "p95": 5094736084,
+      "p99": 5094736084,
+      "max": 5094736084
+    },
+    "reported_latency_p95": {
+      "count": 1,
+      "min": 942725000,
+      "avg": 942725000,
+      "p50": 942725000,
+      "p95": 942725000,
+      "p99": 942725000,
+      "max": 942725000
+    },
+    "reported_latency_avg": {
+      "count": 1,
+      "min": 852051498,
+      "avg": 852051498,
+      "p50": 852051498,
+      "p95": 852051498,
+      "p99": 852051498,
+      "max": 852051498
+    },
+    "observed_latency_p95": {
+      "count": 1,
+      "min": 1048522958,
+      "avg": 1048522958,
+      "p50": 1048522958,
+      "p95": 1048522958,
+      "p99": 1048522958,
+      "max": 1048522958
+    }
+  }
+}

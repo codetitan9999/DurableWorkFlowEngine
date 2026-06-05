@@ -1,0 +1,1178 @@
+{
+  "label": "soak-default-10min",
+  "captured_at": "2026-06-05T06:04:31.03533Z",
+  "scenario": "success-linear",
+  "executions": 100,
+  "concurrency": 20,
+  "repeat": 30,
+  "poll_interval": 200000000,
+  "timeout": 60000000000,
+  "max_attempts": 3,
+  "backoff_seconds": 1,
+  "chain_length": 5,
+  "api_base_url": "http://localhost:8080",
+  "go_version": "go1.26.3",
+  "hostname": "srees-MacBook-Pro.local",
+  "results": [
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "c5ea54d9-afca-48e5-96c8-559423b86ef4",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 18475141709,
+      "throughput_per_second": 5.412678374817872,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 2417232791,
+        "avg": 3692672998,
+        "p50": 4003149708,
+        "p95": 4024657375,
+        "p99": 4027098875,
+        "max": 4027449459
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 2403691000,
+        "avg": 3596103950,
+        "p50": 3819602000,
+        "p95": 3993221000,
+        "p99": 3998105000,
+        "max": 3999962000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "39c468c0-ea49-483b-b2f1-ef2d921f4c21",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20032606542,
+      "throughput_per_second": 4.991861632700758,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4001596792,
+        "avg": 4005222540,
+        "p50": 4004470333,
+        "p95": 4010783291,
+        "p99": 4013539209,
+        "max": 4013876584
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3919819000,
+        "avg": 3950830320,
+        "p50": 3951152000,
+        "p95": 3967500000,
+        "p99": 3970883000,
+        "max": 3972077000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "e6b2393f-127e-40e9-8bd1-833732bef95b",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20035758708,
+      "throughput_per_second": 4.9910762780383955,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4002200834,
+        "avg": 4006089385,
+        "p50": 4005870417,
+        "p95": 4010449833,
+        "p99": 4011100708,
+        "max": 4011672167
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3879024000,
+        "avg": 3909828230,
+        "p50": 3909197000,
+        "p95": 3933088000,
+        "p99": 3938320000,
+        "max": 3940428000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "4bd66640-39cd-4d6f-87c5-d12eb66df2a0",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20051965833,
+      "throughput_per_second": 4.987042209867902,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4002491458,
+        "avg": 4009078667,
+        "p50": 4008223083,
+        "p95": 4015472375,
+        "p99": 4016909542,
+        "max": 4017105833
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3834382000,
+        "avg": 3866007140,
+        "p50": 3860693000,
+        "p95": 3900224000,
+        "p99": 3902910000,
+        "max": 3904169000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "6e4f00d6-cd15-45b6-8387-09032028385d",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20060002667,
+      "throughput_per_second": 4.9850442026364465,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 3805076167,
+        "avg": 3979833590,
+        "p50": 4009266583,
+        "p95": 4016980917,
+        "p99": 4019111000,
+        "max": 4019384125
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3791825000,
+        "avg": 3852583530,
+        "p50": 3830837000,
+        "p95": 3989489000,
+        "p99": 3993868000,
+        "max": 3994742000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "045a8a16-332d-4a12-a107-9eae2a8adb25",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 19829809500,
+      "throughput_per_second": 5.042912792480432,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 3806525875,
+        "avg": 3965123552,
+        "p50": 4003296375,
+        "p95": 4005528208,
+        "p99": 4005980666,
+        "max": 4006074958
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3741936000,
+        "avg": 3916932070,
+        "p50": 3952211000,
+        "p95": 3969482000,
+        "p99": 3974232000,
+        "max": 3975555000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "b68c1384-ad34-42f2-99cc-fdffdd772927",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20033264709,
+      "throughput_per_second": 4.991697631543536,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4003446334,
+        "avg": 4005998603,
+        "p50": 4005607500,
+        "p95": 4010236583,
+        "p99": 4011119833,
+        "max": 4011416209
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3899115000,
+        "avg": 3929341660,
+        "p50": 3928934000,
+        "p95": 3954018000,
+        "p99": 3959836000,
+        "max": 3961258000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "8f9573bc-f6c2-4b28-8fda-4dce7012f06e",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20041641209,
+      "throughput_per_second": 4.989611327593944,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4002968667,
+        "avg": 4007108958,
+        "p50": 4006945875,
+        "p95": 4010114917,
+        "p99": 4013529542,
+        "max": 4013911333
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3856478000,
+        "avg": 3892170910,
+        "p50": 3890100000,
+        "p95": 3921641000,
+        "p99": 3926682000,
+        "max": 3927199000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "61f5c8bf-4799-4d27-be1a-bb07a9483164",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 19906736750,
+      "throughput_per_second": 5.02342504730214,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 3803788708,
+        "avg": 3979679443,
+        "p50": 4005198708,
+        "p95": 4068690875,
+        "p99": 4071975875,
+        "max": 4074019625
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3752043000,
+        "avg": 3878549330,
+        "p50": 3859800000,
+        "p95": 3976397000,
+        "p99": 3978801000,
+        "max": 3979242000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "300c7be0-1914-4a4f-8624-cb687aad1728",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20029906875,
+      "throughput_per_second": 4.992534444821277,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4001615417,
+        "avg": 4004934692,
+        "p50": 4004763958,
+        "p95": 4009600708,
+        "p99": 4010847459,
+        "max": 4011054583
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3919577000,
+        "avg": 3947399540,
+        "p50": 3947522000,
+        "p95": 3967701000,
+        "p99": 3973668000,
+        "max": 3974905000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "ae7d0c03-154f-4bfb-abc7-fca97c610700",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20030535208,
+      "throughput_per_second": 4.992377835219349,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4002508000,
+        "avg": 4005167792,
+        "p50": 4004428250,
+        "p95": 4009895125,
+        "p99": 4010364291,
+        "max": 4010664458
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3886641000,
+        "avg": 3916145070,
+        "p50": 3917104000,
+        "p95": 3935933000,
+        "p99": 3940760000,
+        "max": 3942136000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "19830f2b-f29e-4870-a20d-d46f486833f0",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20047164667,
+      "throughput_per_second": 4.9882365741531425,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4003528916,
+        "avg": 4008657759,
+        "p50": 4007899750,
+        "p95": 4013824000,
+        "p99": 4016819084,
+        "max": 4016849084
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3832784000,
+        "avg": 3867318100,
+        "p50": 3864778000,
+        "p95": 3898235000,
+        "p99": 3905205000,
+        "max": 3907268000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "e47deecd-4f7b-475a-81d2-d234180a38c5",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20074150375,
+      "throughput_per_second": 4.981530880855525,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 3806171709,
+        "avg": 3982432028,
+        "p50": 4009991750,
+        "p95": 4022145791,
+        "p99": 4030961250,
+        "max": 4031196583
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3787816000,
+        "avg": 3843052530,
+        "p50": 3838384000,
+        "p95": 3985183000,
+        "p99": 3994601000,
+        "max": 3996300000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "a9696e97-4a8d-4b85-8e7c-17da6561d5ba",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 19838034166,
+      "throughput_per_second": 5.040822047347209,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 3807871958,
+        "avg": 3966085184,
+        "p50": 4003872167,
+        "p95": 4005513208,
+        "p99": 4006921750,
+        "max": 4006923875
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3740081000,
+        "avg": 3913252500,
+        "p50": 3947019000,
+        "p95": 3968063000,
+        "p99": 3970627000,
+        "max": 3971605000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "d3304259-4b98-4519-add3-5b3e787a7da3",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20035207959,
+      "throughput_per_second": 4.991213478025272,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4003477583,
+        "avg": 4006481242,
+        "p50": 4006362875,
+        "p95": 4010361708,
+        "p99": 4011722292,
+        "max": 4011751041
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3881824000,
+        "avg": 3907488010,
+        "p50": 3907148000,
+        "p95": 3927021000,
+        "p99": 3932778000,
+        "max": 3933503000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "be7d4d6d-9152-410e-962b-78f14c33c244",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20044687833,
+      "throughput_per_second": 4.988852948628506,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4005023125,
+        "avg": 4008038629,
+        "p50": 4007871542,
+        "p95": 4010925833,
+        "p99": 4011728083,
+        "max": 4012866917
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3832858000,
+        "avg": 3874456090,
+        "p50": 3874590000,
+        "p95": 3904858000,
+        "p99": 3908124000,
+        "max": 3909036000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "10abb846-8c76-4c90-acf6-5c95042b3dbe",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 19872208541,
+      "throughput_per_second": 5.032153310674136,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 3807388209,
+        "avg": 3972441247,
+        "p50": 4011246292,
+        "p95": 4018013208,
+        "p99": 4018522334,
+        "max": 4020309334
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3789862000,
+        "avg": 3842504160,
+        "p50": 3831936000,
+        "p95": 3986295000,
+        "p99": 3991745000,
+        "max": 3993262000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "d13fdb6f-e4ec-4ef1-80cc-139f0af534d2",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20027523958,
+      "throughput_per_second": 4.993128467089162,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4001585666,
+        "avg": 4004428654,
+        "p50": 4004083458,
+        "p95": 4008198834,
+        "p99": 4008997042,
+        "max": 4009262791
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3928076000,
+        "avg": 3958574430,
+        "p50": 3959257000,
+        "p95": 3986694000,
+        "p99": 3992630000,
+        "max": 3993583000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "402895d5-564f-4c8a-ad4b-7f767b6e2d80",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20037509292,
+      "throughput_per_second": 4.990640230915582,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4002828542,
+        "avg": 4006706367,
+        "p50": 4006071667,
+        "p95": 4011836959,
+        "p99": 4014769583,
+        "max": 4015239708
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3897644000,
+        "avg": 3932131490,
+        "p50": 3931853000,
+        "p95": 3957288000,
+        "p99": 3962080000,
+        "max": 3963522000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "fb0ad984-5e12-4c2e-b68d-f80eed85f21b",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20035832333,
+      "throughput_per_second": 4.991057937498065,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4002984083,
+        "avg": 4006077686,
+        "p50": 4005770500,
+        "p95": 4011002666,
+        "p99": 4012640542,
+        "max": 4013126041
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3858015000,
+        "avg": 3897125070,
+        "p50": 3897524000,
+        "p95": 3922797000,
+        "p99": 3925667000,
+        "max": 3926633000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "fa0dddb4-59e0-4595-8853-236e7c1780a0",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20062080458,
+      "throughput_per_second": 4.98452791121789,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 3807835917,
+        "avg": 4007746878,
+        "p50": 4011666542,
+        "p95": 4017448083,
+        "p99": 4020200083,
+        "max": 4020231959
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3795003000,
+        "avg": 3847258890,
+        "p50": 3849194000,
+        "p95": 3874496000,
+        "p99": 3879114000,
+        "max": 3880453000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "4b7e5187-25d4-4821-ab15-f110f1adbe9b",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 19845705625,
+      "throughput_per_second": 5.038873491806115,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 3804721542,
+        "avg": 3967045261,
+        "p50": 4002848666,
+        "p95": 4020917416,
+        "p99": 4022142833,
+        "max": 4023484875
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3778622000,
+        "avg": 3914431610,
+        "p50": 3972294000,
+        "p95": 3989296000,
+        "p99": 3992863000,
+        "max": 3995550000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "fa10ff73-b7ef-4ce4-bd78-d63ca1c63d38",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20032642291,
+      "throughput_per_second": 4.991852724536827,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4001611916,
+        "avg": 4005467547,
+        "p50": 4004878334,
+        "p95": 4009823791,
+        "p99": 4012835500,
+        "max": 4013380125
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3917771000,
+        "avg": 3947297600,
+        "p50": 3947288000,
+        "p95": 3969746000,
+        "p99": 3972505000,
+        "max": 3974472000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "b94732c5-1fe8-49e5-8f04-7c8f0798feb3",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20035746292,
+      "throughput_per_second": 4.991079370970506,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4001920500,
+        "avg": 4006265237,
+        "p50": 4005661375,
+        "p95": 4010380459,
+        "p99": 4013681083,
+        "max": 4013752584
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3876802000,
+        "avg": 3910073010,
+        "p50": 3908831000,
+        "p95": 3939024000,
+        "p99": 3944529000,
+        "max": 3945900000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "a6a3403c-67b9-418b-97d4-418469e80932",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20052108792,
+      "throughput_per_second": 4.987006655374624,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4004394209,
+        "avg": 4009742175,
+        "p50": 4009419792,
+        "p95": 4015402958,
+        "p99": 4017097666,
+        "max": 4017275500
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3823276000,
+        "avg": 3863970910,
+        "p50": 3865158000,
+        "p95": 3895819000,
+        "p99": 3900573000,
+        "max": 3901948000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "df63668e-cbd9-4196-b187-85b5695768c9",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 19871482250,
+      "throughput_per_second": 5.032337232920811,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 3806911834,
+        "avg": 3971439733,
+        "p50": 4011309666,
+        "p95": 4018201125,
+        "p99": 4019348125,
+        "max": 4019482041
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3783480000,
+        "avg": 3851558150,
+        "p50": 3825031000,
+        "p95": 3988920000,
+        "p99": 3996072000,
+        "max": 3996698000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "562509a8-5c06-477f-98da-3bc9dae7bad8",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20053149625,
+      "throughput_per_second": 4.9867478111932755,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4004052042,
+        "avg": 4007831710,
+        "p50": 4006847958,
+        "p95": 4013946541,
+        "p99": 4020188792,
+        "max": 4020349167
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3913440000,
+        "avg": 3949085370,
+        "p50": 3949859000,
+        "p95": 3970549000,
+        "p99": 3973071000,
+        "max": 3973222000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "ce31b5b3-dfba-4409-b591-7184ec14e65f",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20036257959,
+      "throughput_per_second": 4.990951913507454,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 4002999083,
+        "avg": 4006354214,
+        "p50": 4006004083,
+        "p95": 4012046333,
+        "p99": 4012172584,
+        "max": 4012698958
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3859244000,
+        "avg": 3896382850,
+        "p50": 3896873000,
+        "p95": 3917387000,
+        "p99": 3920861000,
+        "max": 3922326000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "f8842998-afe1-4892-ac1c-b0f076687393",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 20064416125,
+      "throughput_per_second": 4.983947670194166,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 3810819417,
+        "avg": 4008361310,
+        "p50": 4012068542,
+        "p95": 4018409250,
+        "p99": 4020086917,
+        "max": 4020737125
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3796812000,
+        "avg": 3850995410,
+        "p50": 3853059000,
+        "p95": 3881914000,
+        "p99": 3887721000,
+        "max": 3888732000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    },
+    {
+      "scenario": "success-linear",
+      "workflow_definition_id": "3016dae0-2fee-4823-a4fe-8e4c6b1346fd",
+      "executions": 100,
+      "concurrency": 20,
+      "overall_elapsed": 19843347208,
+      "throughput_per_second": 5.039472370855065,
+      "succeeded": 100,
+      "failed": 0,
+      "observed_latency": {
+        "count": 100,
+        "min": 3804119583,
+        "avg": 3966545614,
+        "p50": 4003843750,
+        "p95": 4015392333,
+        "p99": 4212989500,
+        "max": 4213065958
+      },
+      "reported_latency": {
+        "count": 100,
+        "min": 3779793000,
+        "avg": 3912304090,
+        "p50": 3969833000,
+        "p95": 3995192000,
+        "p99": 4008133000,
+        "max": 4009620000
+      },
+      "attempts_per_execution": {
+        "count": 100,
+        "min": 2,
+        "avg": 2,
+        "p50": 2,
+        "p95": 2,
+        "p99": 2,
+        "max": 2
+      }
+    }
+  ],
+  "aggregate": {
+    "repeat_count": 30,
+    "succeeded_runs": 30,
+    "failed_runs": 0,
+    "throughput_per_second": {
+      "count": 30,
+      "min": 4.981530880855525,
+      "avg": 5.0141564934928455,
+      "p50": 4.991079370970506,
+      "p95": 5.042912792480432,
+      "p99": 5.412678374817872,
+      "max": 5.412678374817872
+    },
+    "overall_elapsed": {
+      "count": 30,
+      "min": 18475141709,
+      "avg": 19947887515,
+      "p50": 20035207959,
+      "p95": 20064416125,
+      "p99": 20074150375,
+      "max": 20074150375
+    },
+    "reported_latency_p95": {
+      "count": 30,
+      "min": 3874496000,
+      "avg": 3948915700,
+      "p50": 3957288000,
+      "p95": 3993221000,
+      "p99": 3995192000,
+      "max": 3995192000
+    },
+    "reported_latency_avg": {
+      "count": 30,
+      "min": 3596103950,
+      "avg": 3887838400,
+      "p50": 3897125070,
+      "p95": 3950830320,
+      "p99": 3958574430,
+      "max": 3958574430
+    },
+    "observed_latency_p95": {
+      "count": 30,
+      "min": 4005513208,
+      "avg": 4015206690,
+      "p50": 4011836959,
+      "p95": 4024657375,
+      "p99": 4068690875,
+      "max": 4068690875
+    }
+  }
+}
