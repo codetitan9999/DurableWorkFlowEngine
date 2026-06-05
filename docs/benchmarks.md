@@ -186,6 +186,26 @@ Record:
 - throughput and latency deltas
 - what did or did not improve
 
+### 6a. Multi-worker pass
+
+Purpose:
+
+- compare one worker against a larger consumer group without changing the main local stack shape
+- measure whether extra consumers help once publisher cadence is no longer the first bottleneck
+
+Compose note:
+
+- the default `worker` service publishes host port `8081`
+- extra workers for benchmarking should be started through the `worker-bench` profile, which does not publish host ports
+
+Start extra workers with:
+
+```bash
+docker compose --profile benchmark up -d --scale worker-bench=2 worker-bench
+```
+
+Then run the same benchmark shape used for the tuned single-worker comparison and compare the result with the original artifact.
+
 ### 7. Mixed workload pass
 
 Purpose:
@@ -436,6 +456,15 @@ Useful metadata to keep with each run:
 - runtime setting changes such as `OUTBOX_POLL_INTERVAL`
 - date and hostname
 
+## Multi-worker benchmark shape
+
+The repo now includes a `worker-bench` service in `docker-compose.yml` for scaling the consumer group without colliding on host port `8081`.
+
+That keeps the normal local stack unchanged:
+
+- `worker` still exposes `http://localhost:8081/healthz`
+- `worker-bench` is only for benchmark runs and does not publish host ports
+
 ## How to read the output
 
 Example:
@@ -519,6 +548,32 @@ Those would let future benchmark runs produce even stronger evidence with less m
 
 The following results were captured on `2026-06-05` against the local Docker-based stack. They describe local behavior and should be read that way.
 
+### Quick charts
+
+```mermaid
+xychart-beta
+    title "Throughput by runtime shape"
+    x-axis ["D 100/20", "D 120/30", "D 240/60", "D 500/100", "T 240/60", "T 1000/200", "T 5000/500"]
+    y-axis "exec/s" 0 --> 110
+    bar [5.03, 5.01, 5.01, 5.01, 98.13, 98.95, 99.41]
+```
+
+```mermaid
+xychart-beta
+    title "Soak throughput drift by 5-run bucket"
+    x-axis ["1-5", "6-10", "11-15", "16-20", "21-25", "26-30"]
+    y-axis "exec/s" 0 --> 6
+    line [5.07, 5.01, 5.00, 5.00, 5.00, 5.01]
+```
+
+```mermaid
+xychart-beta
+    title "Reported p95 latency under interruption and mixed traffic"
+    x-axis ["Default soak", "Mixed success path", "Single-worker outage", "3-worker partial loss"]
+    y-axis "seconds" 0 --> 40
+    bar [3.95, 3.90, 37.94, 0.94]
+```
+
 ### Single-worker baseline
 
 | Scenario | Workload | Throughput | Reported latency | Attempts/execution |
@@ -530,6 +585,12 @@ The following results were captured on `2026-06-05` against the local Docker-bas
 | `retry-invalid-input` | `6` exec, concurrency `3`, `3` attempts, `1s` backoff | `0.53 exec/s` | avg `5.53s`, p95 `5.93s` | `3` |
 | `dead-letter-missing-handler` | `10` exec, concurrency `3` | `1.38 exec/s` | avg `1.58s`, p95 `1.83s` | `1` |
 | `replay-missing-handler` | `5` exec, concurrency `2` | `0.43 exec/s` | avg `3.77s`, p95 `3.93s` | `2` |
+
+### Repeated default baseline
+
+| Scenario | Workload | Repeat | Throughput | Reported latency | Attempts/execution |
+| --- | --- | ---: | ---: | --- | ---: |
+| `success-linear` | `100` exec, concurrency `20` | `5` | `5.03 exec/s` | avg p95 `3.96s` | `2` |
 
 ### Default-shape saturation results
 
@@ -579,6 +640,28 @@ Notes:
 - work was not lost
 - execution semantics stayed correct after recovery
 
+### Soak test
+
+The default happy-path shape was also run as a longer repeated soak:
+
+| Scenario | Workload | Repeat | Throughput | Reported latency |
+| --- | --- | ---: | ---: | --- |
+| `success-linear` | `100` exec, concurrency `20` | `30` | `5.01 exec/s` | avg p95 `3.95s` |
+
+Drift check:
+
+- first 5 runs throughput avg: `5.07 exec/s`
+- last 5 runs throughput avg: `5.01 exec/s`
+- first 5 runs reported p95 avg: `3.96s`
+- last 5 runs reported p95 avg: `3.95s`
+
+Container memory stayed modest across the soak:
+
+- API: `23.14 MiB -> 32.73 MiB`
+- worker: `21.96 MiB -> 25.19 MiB`
+- Postgres: `147.5 MiB -> 166.1 MiB`
+- Redis: `13.78 MiB -> 14.9 MiB`
+
 ### Multi-worker comparison
 
 Two extra worker processes were started against the same Redis consumer group and the `success-linear` benchmark was rerun.
@@ -620,8 +703,65 @@ Notes:
 - changing that cadence had a direct effect on measured throughput
 - the resulting shift was consistent with the architecture
 
+### Multi-worker tuned comparison
+
+With the scale-only `worker-bench` profile enabled, the consumer group was expanded to three workers total and the tuned `1000/200` happy-path run was repeated:
+
+| Scenario | Worker shape | Workload | Throughput | Reported latency |
+| --- | --- | --- | ---: | --- |
+| `success-linear` tuned | `1` worker | `1000` exec, concurrency `200` | `98.95 exec/s` | avg p95 `1.97s` |
+| `success-linear` tuned | `3` workers | `1000` exec, concurrency `200` | `99.39 exec/s` | avg p95 `1.96s` |
+
+Notes:
+
+- the extra consumers did not materially change throughput at this workload
+- once the outbox cadence was reduced, the next bottleneck still did not appear to be raw worker count for the built-in handlers
+
+### Partial consumer loss with multiple workers
+
+One benchmark-only worker was stopped and restarted during a tuned run while the rest of the consumer group remained available:
+
+| Scenario | Worker shape | Workload | Throughput | Reported latency | Attempts/execution |
+| --- | --- | --- | ---: | --- | ---: |
+| `success-linear` tuned | `3` workers, `1` interrupted | `500` exec, concurrency `100` | `98.14 exec/s` | p95 `942ms` | `2` |
+
+Compared with the full single-worker interruption case:
+
+- partial consumer loss caused much less latency inflation than losing the only worker
+- keeping other consumers alive in the same Redis group preserved near-normal throughput
+
+### Mixed workload pass
+
+The following scenarios were run in parallel:
+
+- `70` success executions at concurrency `14`
+- `15` retry-invalid-input executions at concurrency `3`
+- `10` dead-letter-missing-handler executions at concurrency `2`
+- `5` replay-missing-handler executions at concurrency `1`
+
+Results:
+
+| Scenario | Workload | Throughput | Reported latency | Attempts/execution |
+| --- | --- | ---: | --- | ---: |
+| `success-linear` | `70` exec, concurrency `14` | `3.64 exec/s` | p95 `3.90s` | `2` |
+| `retry-invalid-input` | `15` exec, concurrency `3` | `0.51 exec/s` | p95 `5.96s` | `3` |
+| `dead-letter-missing-handler` | `10` exec, concurrency `2` | `1.19 exec/s` | p95 `1.99s` | `1` |
+| `replay-missing-handler` | `5` exec, concurrency `1` | `0.25 exec/s` | p95 `4.01s` | `2` |
+
+Notes:
+
+- mixed failure traffic reduced happy-path throughput compared with the clean default baseline
+- the happy-path reported p95 stayed close to the default range, so the first effect was on throughput share rather than a dramatic latency spike
+
 ### Important benchmarking note
 
 Benchmarking also exposed a bug in the retry scheduler path: due retries could become stuck because `EnqueueDueTaskRetries` kept a query cursor open and then attempted additional `Exec` calls inside the same transaction, causing repeated `conn busy` failures in the outbox loop.
 
 That issue was fixed before the persisted-retry benchmark above was recorded. The benchmark suite was useful here because it surfaced the bug and gave a way to verify the fix.
+
+Another limit showed up during the tuned `5000/500` run:
+
+- with the benchmark's default `200ms` snapshot polling, the harness hit `connect: resource temporarily unavailable` while reading execution snapshots
+- rerunning the same workload with a `1s` poll interval completed successfully at `99.41 exec/s`
+
+That suggests the control-plane read path became a separate limit before the workflow execution path did at that load level.
