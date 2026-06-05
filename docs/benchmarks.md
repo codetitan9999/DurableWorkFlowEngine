@@ -34,12 +34,195 @@ It does three things:
 2. triggers many executions concurrently
 3. polls execution snapshots until terminal state, then computes summary statistics
 
+It can also:
+
+- repeat the same run multiple times with `-repeat`
+- write a JSON suite report with `-output-file`
+- keep per-execution detail with `-include-runs`
+
 It reports two latency views:
 
 - observed latency: request trigger until the harness sees a terminal snapshot
 - reported engine latency: `started_at` to `completed_at` from the execution snapshot
 
 The reported engine latency is usually the more stable number because it removes most snapshot-poll noise.
+
+Example:
+
+```bash
+go run ./cmd/bench \
+  -scenario success-linear \
+  -executions 100 \
+  -concurrency 20 \
+  -repeat 5 \
+  -label baseline-happy-path \
+  -output-file benchmarks/results/$(date +%F)/success-linear-baseline.json
+```
+
+That produces one JSON file containing:
+
+- run configuration
+- per-run summaries
+- aggregate throughput and latency summaries across repeats
+
+## Benchmark suite checklist
+
+The most useful way to run this benchmark suite is as a set of named passes instead of isolated one-off commands.
+
+### 1. Baseline
+
+Purpose:
+
+- establish a clean happy-path reference point
+- capture throughput and latency with the default runtime shape
+
+Recommended run:
+
+```bash
+go run ./cmd/bench \
+  -scenario success-linear \
+  -executions 100 \
+  -concurrency 20 \
+  -repeat 5 \
+  -output-file benchmarks/results/$(date +%F)/baseline-success-linear.json
+```
+
+Record:
+
+- throughput `avg`, `p95`, `max`
+- reported latency `avg`, `p95`, `p99`
+- attempts per execution
+
+### 2. Load sweep
+
+Purpose:
+
+- find where latency starts bending under increasing load
+- see whether throughput plateaus
+
+Recommended matrix:
+
+- executions: `100`, `500`, `1000`, `2000`, `5000`
+- concurrency: `20`, `50`, `100`, `200`, `500`
+
+For each point:
+
+- run `repeat 3` or `repeat 5`
+- save JSON output under the same date directory
+
+### 3. Workflow-depth sweep
+
+Purpose:
+
+- see how latency scales with longer workflow chains
+- check that attempts stay aligned with chain length on the happy path
+
+Recommended matrix:
+
+- chain length: `2`, `5`, `10`, `20`
+- executions: `20`, `50`
+- concurrency: `5`, `10`
+
+### 4. Soak test
+
+Purpose:
+
+- check whether the system stays stable over time
+- watch for throughput drift, backlog growth, or resource creep
+
+Suggested approach:
+
+- choose one stable happy-path configuration
+- run it repeatedly for `10-30` minutes
+- save each repeated run to JSON
+- collect Prometheus metrics and container stats during the same window
+
+Suggested signals:
+
+- throughput drift between early and late runs
+- latency drift
+- worker or API restarts
+- memory growth
+- backlog that stops draining
+
+### 5. Failure-injection pass
+
+Purpose:
+
+- verify that work is delayed rather than lost
+- measure recovery cost under worker interruption
+
+Suggested cases:
+
+- stop the only worker while a `success-linear` run is active
+- stop one worker in a multi-worker run
+- delay replay until a dead-letter backlog exists
+
+For each case, record:
+
+- final success/failure counts
+- recovery time
+- latency inflation
+- whether attempts stayed within expected bounds
+
+### 6. Tuning sweep
+
+Purpose:
+
+- separate code-path limits from configuration limits
+- explain which runtime settings move the first bottleneck
+
+Parameters worth changing one at a time:
+
+- `OUTBOX_POLL_INTERVAL`
+- worker count
+- benchmark poll interval
+- retry backoff for retry-focused scenarios
+
+Record:
+
+- the baseline setting
+- the changed setting
+- throughput and latency deltas
+- what did or did not improve
+
+### 7. Mixed workload pass
+
+Purpose:
+
+- see how the system behaves when success, retry, dead-letter, and replay traffic overlap
+
+Current harness note:
+
+- the harness runs one scenario per process
+- a mixed workload can be created by running multiple benchmark processes at the same time in separate terminals
+
+Suggested mix:
+
+- `70%` success-linear
+- `15%` retry-invalid-input
+- `10%` dead-letter-missing-handler
+- `5%` replay-missing-handler
+
+Record:
+
+- whether happy-path latency changes under failure traffic
+- whether dead-letter or replay traffic causes noticeable backlog for normal traffic
+
+### 8. Boundary report
+
+Purpose:
+
+- turn the raw runs into a short explanation of the system's current limits
+
+For each major pass, summarize:
+
+- where throughput plateaued
+- when latency started rising sharply
+- whether the bottleneck came from publisher cadence, worker count, polling load, or another factor
+- whether the system recovered correctly after injected failure
+
+This report is more useful than a single headline number because it explains how the system behaves as load and runtime conditions change.
 
 ## Supported scenarios
 
@@ -225,6 +408,33 @@ The point of this scenario is to verify that:
 
 - work was recovered after consumer failure
 - reclaimed messages still respected task-state checks and idempotency boundaries
+
+## Result storage
+
+Keeping the raw results makes it much easier to compare runs later.
+
+Suggested layout:
+
+```text
+benchmarks/results/
+  2026-06-05/
+    baseline-success-linear.json
+    load-sweep-c100-e500.json
+    load-sweep-c200-e1000.json
+    tuning-outbox-100ms.json
+    failure-worker-restart.json
+```
+
+Useful metadata to keep with each run:
+
+- scenario
+- executions
+- concurrency
+- repeat count
+- poll interval
+- timeout
+- runtime setting changes such as `OUTBOX_POLL_INTERVAL`
+- date and hostname
 
 ## How to read the output
 
