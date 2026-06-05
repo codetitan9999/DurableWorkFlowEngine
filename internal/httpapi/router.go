@@ -204,6 +204,7 @@ func (rt *Router) handleTaskActions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		telemetry.TaskReplays.WithLabelValues("api").Inc()
 		writeJSON(w, http.StatusAccepted, task)
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "task action not found"})

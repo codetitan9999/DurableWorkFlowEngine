@@ -56,6 +56,7 @@ func (p *Publisher) publishOnce(ctx context.Context) error {
 		return err
 	}
 	if retryCount > 0 {
+		telemetry.RetriesEnqueued.WithLabelValues("api").Add(float64(retryCount))
 		p.logger.InfoContext(ctx, "enqueued due task retries", "count", retryCount)
 	}
 

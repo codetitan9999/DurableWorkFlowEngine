@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"durableflow/internal/telemetry"
+
 	"github.com/redis/go-redis/v9"
 )
 
@@ -118,6 +120,7 @@ func (r *RedisStreams) Consume(ctx context.Context, opts ConsumeOptions, handle 
 			return err
 		}
 		if len(reclaimed) > 0 {
+			telemetry.ReclaimedMessages.WithLabelValues("worker", r.stream, r.group).Add(float64(len(reclaimed)))
 			r.logger.Info("reclaimed pending stream messages", "stream", r.stream, "group", r.group, "consumer", opts.Consumer, "count", len(reclaimed))
 			if err := r.processMessages(ctx, opts.Consumer, reclaimed, handle); err != nil {
 				return err
