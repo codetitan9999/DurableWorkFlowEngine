@@ -87,6 +87,27 @@ services:
     ports:
       - "8081:8081"
 
+  worker-bench:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    profiles:
+      - benchmark
+    environment:
+      SERVICE_NAME: durableflow-worker
+      WORKER_HTTP_ADDR: ${WORKER_HTTP_ADDR:-:8081}
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/durableflow?sslmode=disable}
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      REDIS_STREAM: ${REDIS_STREAM:-durableflow.tasks}
+      REDIS_GROUP: ${REDIS_GROUP:-durableflow-workers}
+      REDIS_RECLAIM_MIN_IDLE: ${REDIS_RECLAIM_MIN_IDLE:-30s}
+      REDIS_RECLAIM_COUNT: ${REDIS_RECLAIM_COUNT:-10}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
+    depends_on:
+      - postgres
+      - redis
+      - otel-collector
+
   web:
     build:
       context: .
