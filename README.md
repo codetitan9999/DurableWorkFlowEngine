@@ -1,14 +1,14 @@
 # DurableFlow
 
-DurableFlow is a fault-tolerant workflow orchestration engine built to explore the parts of distributed systems that are easy to ignore in smaller backend projects and very hard to ignore in production systems: durable state, retries, duplicate delivery, dead-letter handling, crash recovery, and idempotency.
+DurableFlow is a workflow orchestration project built to explore the parts of distributed systems that usually become painful only after failures show up: durable state, retries, duplicate delivery, dead-letter handling, crash recovery, and idempotency.
 
-This project is intentionally not a toy queue consumer with a dashboard. It is designed around one opinionated rule:
+The project is centered on one rule:
 
 - Postgres is the source of truth.
 - Redis Streams is transport, not truth.
 - Delivery is at-least-once, so the system must tolerate duplicates.
 
-That rule drives almost every important technical decision in the codebase.
+That rule drives most of the important tradeoffs in the codebase.
 
 ## What the project does today
 
@@ -41,7 +41,7 @@ Many workflow systems look simple until something goes wrong. The hard problems 
 - a recovered worker picks up a message that was abandoned by another worker
 - a handler touches an external side effect and must not repeat it accidentally
 
-DurableFlow tackles those problems directly instead of treating them as future cleanup work.
+DurableFlow tries to handle those problems directly instead of leaving them as future cleanup work.
 
 The project demonstrates:
 
@@ -135,7 +135,7 @@ The built-in handlers use `idempotency_records` to reserve and complete side-eff
 - the same task instance can resume its own in-progress reservation
 - a different duplicate task instance is blocked from repeating the side effect
 
-This is one of the main correctness checks in the project.
+This is one of the main correctness boundaries in the project.
 
 ## Current system shape
 
@@ -153,7 +153,7 @@ This is one of the main correctness checks in the project.
 - Prometheus
 - Grafana
 
-The stack is meant to run as a reproducible local distributed system, not as a set of disconnected code samples. Docker Compose brings up the API, worker, web dashboard, Postgres, Redis, and observability services together so retry behavior, replay, crash recovery, and inspection can be exercised end to end.
+The stack is meant to run as one reproducible local system, not as disconnected code samples. Docker Compose brings up the API, worker, web dashboard, Postgres, Redis, and observability services together so retry behavior, replay, crash recovery, and inspection can be exercised end to end.
 
 For scaling benchmarks, the compose file also includes a `worker-bench` profile that starts extra consumers in the same Redis group without publishing additional host ports.
 
@@ -193,7 +193,7 @@ To check whether that ceiling came from the overall design or from a specific ru
 - `5000` executions, concurrency `500`, `1s` polling: `99.28 exec/s`, avg `4.43s`, p95 `4.92s`
 - `10000` executions, concurrency `1000`, `1s` polling: `99.45 exec/s`, avg `9.26s`, p95 `9.86s`
 
-This shows that the first boundary in the default setup was mainly publisher cadence, not worker count.
+This suggests that the first boundary in the default setup was mainly publisher cadence, not worker count.
 
 ### Failure-path behavior
 
@@ -213,7 +213,7 @@ One run intentionally stopped the only worker mid-flight, waited through the rec
 - reported latency p95 rose to `55.82s`
 - attempts per execution still stayed at `2`
 
-This shows that consumer failure can delay work significantly, while the system still recovers without losing execution correctness.
+This shows that consumer failure can delay work significantly while the system still recovers without losing work.
 
 ### Soak and mixed workload checks
 
@@ -470,20 +470,27 @@ Replay one dead-lettered task:
 curl -X POST http://localhost:8080/api/tasks/<task-id>/replay
 ```
 
-## Current scope and limitations
+## Current scope and known limitations
 
-DurableFlow covers a real vertical slice of durable execution, failure handling, and operational recovery.
+DurableFlow covers a meaningful slice of durable execution, failure handling, and operational recovery in a local multi-service setup.
 
-It does not yet attempt to be a full Temporal-style workflow platform.
+It is still a focused exploration project, not a production-ready workflow platform.
 
-The main deliberate limitations today are:
+Current product-scope limits:
 
 - workflow chaining is linear, not a general DAG
 - workflow definitions are not versioned yet
-- the dashboard is operationally useful but still lightweight
-- replay exists, but there is no richer operator audit console yet
+- the dashboard is useful for inspection and replay, but it is still lightweight
+- replay exists, but there is no richer operator audit trail yet
 
-Those gaps are intentional. The infrastructure pieces came first so later workflow features have a stable base.
+Current engineering limits:
+
+- running-task recovery still depends on message redelivery plus Postgres state checks; there is no separate lease or heartbeat model for long-running tasks
+- the outbox path works well in the current single-API local shape, but multi-publisher coordination has not been stress-tested
+- tests are strongest around orchestration and handler behavior; database and outbox integration coverage is still thinner than I would want for a production system
+- benchmark numbers describe local Docker-based behavior and should not be read as production-scale claims
+
+If I kept pushing this project, the next improvements would be stronger DB/outbox integration tests, clearer replay audit history, and a more explicit recovery model for long-running tasks.
 
 ## What to read next
 
