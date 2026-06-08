@@ -25,7 +25,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	cfg := config.LoadAPIConfig()
+	cfg, err := config.LoadAPIConfig()
+	if err != nil {
+		logger.Error("invalid api configuration", "error", err)
+		os.Exit(1)
+	}
 
 	shutdownTelemetry, err := telemetry.Setup(ctx, cfg.ServiceName, cfg.OTLPTraceEndpoint, logger)
 	if err != nil {

@@ -25,7 +25,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	cfg := config.LoadWorkerConfig()
+	cfg, err := config.LoadWorkerConfig()
+	if err != nil {
+		logger.Error("invalid worker configuration", "error", err)
+		os.Exit(1)
+	}
 
 	shutdownTelemetry, err := telemetry.Setup(ctx, cfg.ServiceName, cfg.OTLPTraceEndpoint, logger)
 	if err != nil {
