@@ -267,6 +267,7 @@ The repo includes a small benchmark runner plus helper scripts:
 - [scripts/run_bench_suite.sh](scripts/run_bench_suite.sh)
 - [scripts/generate_benchmark_charts.sh](scripts/generate_benchmark_charts.sh)
 - [benchmarks/results/2026-06-05/charts.md](benchmarks/results/2026-06-05/charts.md)
+- [docs/operations.md](docs/operations.md)
 
 Useful commands:
 
@@ -275,6 +276,7 @@ make bench-suite
 make bench-charts
 make metrics-api
 make metrics-worker
+make metrics-rules
 ```
 
 The generated chart report turns one results directory of JSON artifacts into a small Mermaid-based summary that is easy to review in GitHub.
@@ -364,6 +366,8 @@ cp .env.example .env
 docker compose up --build
 ```
 
+Both the API and worker now fail fast on malformed runtime settings such as invalid durations, invalid reclaim counts, or missing connection values. That keeps local runs from silently using fallback values when the config is wrong.
+
 ## Verification
 
 The codebase is built to be runnable and checkable, not just readable:
@@ -372,6 +376,7 @@ The codebase is built to be runnable and checkable, not just readable:
 - the dashboard is validated with a production build via `npm --prefix apps/web run build`
 - the local stack includes OpenTelemetry, Prometheus, and Grafana so service behavior can be inspected in a realistic multi-service setup
 - benchmark scenarios and measurement guidance live in [docs/benchmarks.md](docs/benchmarks.md)
+- operator checks and alert/runbook guidance live in [docs/operations.md](docs/operations.md)
 
 The current tests focus on the areas where correctness matters most:
 
@@ -387,6 +392,14 @@ The local Grafana dashboard now includes:
 - retry scheduling and retry enqueue rate
 - dead-letter, replay, and reclaimed-message rate
 - outbox dispatch rate
+
+The local Prometheus setup also loads alert rules for:
+
+- API and worker availability
+- elevated API and worker p95 latency
+- dead-letter activity
+- retry spikes
+- reclaimed-message activity
 
 ### Local endpoints
 

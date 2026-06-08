@@ -580,18 +580,19 @@ Avoid wording like:
 
 Those claims are broader than what these runs show.
 
-## Next observability upgrades
+## Current boundary summary
 
-The current benchmark harness is enough for a first pass. The next instrumentation upgrades that would make these runs easier to interpret are:
+The most useful short version of the current measurements is:
 
-- HTTP duration histogram
-- task processing duration histogram
-- retry scheduled counter
-- dead-letter counter
-- replay counter
-- reclaimed-message counter
-
-Those would let future benchmark runs produce even stronger evidence with less manual interpretation.
+| Question | Current answer |
+| --- | --- |
+| What is the first default bottleneck? | Outbox publish cadence. With `OUTBOX_POLL_INTERVAL=2s`, the local `2-step` workflow plateaus near `~5 exec/s`. |
+| What changes the ceiling the most? | Reducing outbox polling from `2s` to `100ms`, which increased measured happy-path throughput to `~99 exec/s`. |
+| Does the system stay stable over time? | Yes for the default happy path in local soak runs: `30` repeats averaged `5.01 exec/s` with p95 around `3.95s` and little drift. |
+| Does adding workers help immediately? | Not much for the built-in handlers at the tuned `1000/200` workload; `1` worker and `3` workers both stayed near `~99 exec/s`. |
+| What happens when the only worker dies? | Work is delayed heavily but not lost; throughput fell to `0.29 exec/s` and p95 rose to `55.82s` before recovery completed. |
+| What happens when one worker in a larger group dies? | The remaining consumers absorb most of it; throughput stayed at `98.14 exec/s` with p95 under `1s`. |
+| What is the next non-engine bottleneck at very high load? | Snapshot polling on the control plane. The tuned `5000/500` run needed a slower polling interval to avoid client-side socket exhaustion. |
 
 ## Measured local results
 
