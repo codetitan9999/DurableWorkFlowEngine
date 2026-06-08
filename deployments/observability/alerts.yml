@@ -1,0 +1,65 @@
+groups:
+  - name: durableflow-runtime
+    rules:
+      - alert: DurableFlowApiDown
+        expr: up{job="durableflow-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: DurableFlow API is down
+          description: The API health endpoint has not been scraped successfully for at least 1 minute.
+
+      - alert: DurableFlowWorkerDown
+        expr: up{job="durableflow-worker"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: DurableFlow worker is down
+          description: The worker health endpoint has not been scraped successfully for at least 1 minute.
+
+      - alert: DurableFlowApiLatencyP95High
+        expr: histogram_quantile(0.95, sum(rate(durableflow_http_request_duration_seconds_bucket{service="durableflow-api"}[5m])) by (le, route, method)) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: DurableFlow API p95 latency is elevated
+          description: API request p95 has stayed above 1 second for at least 10 minutes.
+
+      - alert: DurableFlowWorkerLatencyP95High
+        expr: histogram_quantile(0.95, sum(rate(durableflow_task_processing_duration_seconds_bucket{service="worker"}[5m])) by (le, handler, status)) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: DurableFlow worker p95 latency is elevated
+          description: Worker task processing p95 has stayed above 2 seconds for at least 10 minutes.
+
+      - alert: DurableFlowDeadLetterActivity
+        expr: sum(increase(durableflow_dead_lettered_tasks_total[10m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: DurableFlow is producing dead-lettered tasks
+          description: One or more tasks have moved into dead-letter state in the last 10 minutes.
+
+      - alert: DurableFlowRetrySpike
+        expr: sum(increase(durableflow_retries_scheduled_total[10m])) > 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: DurableFlow retry scheduling is elevated
+          description: More than 20 retries were scheduled over the last 10 minutes.
+
+      - alert: DurableFlowReclaimActivity
+        expr: sum(increase(durableflow_reclaimed_messages_total[10m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: DurableFlow reclaimed pending Redis messages
+          description: Reclaim activity indicates a worker interruption or slow consumer in the last 10 minutes.

@@ -1,4 +1,4 @@
-.PHONY: up rebuild down test web-build bench-suite bench-charts metrics-api metrics-worker compose-config compose-config-benchmark
+.PHONY: up rebuild down test web-build bench-suite bench-charts metrics-api metrics-worker metrics-rules compose-config compose-config-benchmark
 
 RESULT_DATE ?= $(shell date +%F)
 RESULT_DIR ?= benchmarks/results/$(RESULT_DATE)
@@ -30,6 +30,9 @@ metrics-api:
 
 metrics-worker:
 	curl -fsS http://localhost:8081/metrics
+
+metrics-rules:
+	curl -fsS http://localhost:9090/api/v1/rules
 
 compose-config:
 	docker compose config --services
