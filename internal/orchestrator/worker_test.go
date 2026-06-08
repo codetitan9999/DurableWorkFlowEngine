@@ -448,3 +448,46 @@ func TestHandleDispatchedTaskDeadLettersMissingHandlerWithoutReturningError(t *t
 		t.Fatal("did not expect retry scheduling for missing handler path")
 	}
 }
+
+func TestHandleDispatchedTaskSkipsAlreadyCompletedMessages(t *testing.T) {
+	store := &stubWorkerStore{
+		task: domain.TaskInstance{
+			ID:                  "task-5",
+			WorkflowExecutionID: "exec-4",
+			TaskName:            "send-confirmation",
+		},
+		execution: domain.WorkflowExecution{
+			ID:                   "exec-4",
+			WorkflowDefinitionID: "wf-4",
+		},
+		workflowDefinition: domain.WorkflowDefinition{
+			ID: "wf-4",
+			DefinitionJSON: []byte(`{
+				"entry_task": "send-confirmation",
+				"tasks": [
+					{
+						"name": "send-confirmation",
+						"handler_key": "notifications.send"
+					}
+				]
+			}`),
+		},
+		alreadyCompleted: true,
+	}
+
+	worker := newTestWorker(t, store, stubHandler{
+		key:    "notifications.send",
+		output: json.RawMessage(`{"sent":true}`),
+	})
+
+	err := worker.HandleDispatchedTask(context.Background(), queue.TaskMessage{
+		TaskID:     "task-5",
+		HandlerKey: "notifications.send",
+	})
+	if err != nil {
+		t.Fatalf("expected duplicate delivery to be skipped cleanly, got %v", err)
+	}
+	if store.scheduledRetryCall != nil || store.failedTaskCall != nil || store.completeTaskCall != nil || store.advanceTaskCall != nil {
+		t.Fatal("did not expect any persistence writes for an already completed task")
+	}
+}

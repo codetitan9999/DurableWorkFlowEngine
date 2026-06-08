@@ -135,3 +135,28 @@ func TestSampleEchoHandlerReturnsBeginError(t *testing.T) {
 		t.Fatal("did not expect completion after begin failure")
 	}
 }
+
+func TestSampleEchoHandlerReleasesReservationWhenCompleteFails(t *testing.T) {
+	store := &stubIdempotencyStore{
+		completeErr: errors.New("write failed"),
+	}
+	handler := NewSampleEchoHandler(
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		store,
+	)
+
+	_, err := handler.Handle(context.Background(), domain.TaskInstance{
+		ID:             "task-1",
+		IdempotencyKey: "idem-1",
+		InputJSON:      json.RawMessage(`{"customer_id":"cust-1"}`),
+	})
+	if err == nil {
+		t.Fatal("expected completion error to be returned")
+	}
+	if store.completeCalls != 1 {
+		t.Fatalf("expected one completion call, got %d", store.completeCalls)
+	}
+	if store.releaseCalls != 1 {
+		t.Fatalf("expected reservation release after completion error, got %d", store.releaseCalls)
+	}
+}
