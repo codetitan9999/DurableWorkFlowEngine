@@ -24,6 +24,10 @@ var (
 func RequireIntegrationDatabase(t testing.TB) string {
 	t.Helper()
 
+	if os.Getenv("ENABLE_INTEGRATION_TESTS") != "true" {
+		t.Skip("integration test skipped: ENABLE_INTEGRATION_TESTS is not set to true")
+	}
+
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("integration test skipped: TEST_DATABASE_URL is not set")
@@ -33,6 +37,10 @@ func RequireIntegrationDatabase(t testing.TB) string {
 
 func RequireIntegrationRedis(t testing.TB) string {
 	t.Helper()
+
+	if os.Getenv("ENABLE_INTEGRATION_TESTS") != "true" {
+		t.Skip("integration test skipped: ENABLE_INTEGRATION_TESTS is not set to true")
+	}
 
 	redisAddr := os.Getenv("TEST_REDIS_ADDR")
 	if redisAddr == "" {
