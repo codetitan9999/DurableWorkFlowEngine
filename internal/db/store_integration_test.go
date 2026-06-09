@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 )
 
 func TestCreateExecutionAndTaskRollbackOnNextTaskConflict(t *testing.T) {
-	store, _ := testutil.OpenIntegrationStore(t)
+	store, pool := testutil.OpenIntegrationStore(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -28,8 +29,27 @@ func TestCreateExecutionAndTaskRollbackOnNextTaskConflict(t *testing.T) {
 		t.Fatal("expected task to be runnable")
 	}
 
-	if _, err := store.CreateExecutionAndTask(ctx, definition.ID, json.RawMessage(`{"seed":true}`), "send-confirmation", "notifications.send"); err != nil {
-		t.Fatalf("seed second execution task: %v", err)
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO task_instances (
+			workflow_execution_id,
+			task_name,
+			handler_key,
+			status,
+			input_json,
+			idempotency_key,
+			created_at,
+			updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+	`,
+		start.Execution.ID,
+		"send-confirmation",
+		"notifications.send",
+		domain.TaskStatusPending,
+		json.RawMessage(`{"seed":true}`),
+		fmt.Sprintf("%s:%s", start.Execution.ID, "send-confirmation"),
+	); err != nil {
+		t.Fatalf("seed conflicting next task: %v", err)
 	}
 
 	err = store.CompleteTaskAttemptAndEnqueueNextTask(
@@ -209,7 +229,7 @@ func TestIdempotencyConflictAndCachedResponse(t *testing.T) {
 	if !replayed {
 		t.Fatal("expected second caller to reuse cached response")
 	}
-	if string(cached) != string(response) {
+	if !jsonEqual(cached, response) {
 		t.Fatalf("expected cached response %s, got %s", response, cached)
 	}
 }
@@ -284,4 +304,16 @@ func countPendingOutboxForTask(t *testing.T, pending []domain.OutboxEvent, taskI
 		}
 	}
 	return count
+}
+
+func jsonEqual(left, right json.RawMessage) bool {
+	var leftValue any
+	var rightValue any
+	if err := json.Unmarshal(left, &leftValue); err != nil {
+		return false
+	}
+	if err := json.Unmarshal(right, &rightValue); err != nil {
+		return false
+	}
+	return reflect.DeepEqual(leftValue, rightValue)
 }

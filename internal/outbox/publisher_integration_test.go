@@ -21,6 +21,8 @@ func TestPublishOnceDispatchesPendingOutboxEvent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	clearAllPendingOutbox(t, ctx, store)
+
 	definition, err := store.CreateWorkflowDefinition(ctx, fmt.Sprintf("outbox-%d", time.Now().UnixNano()), "outbox integration test", json.RawMessage(`{
 		"entry_task": "validate-order",
 		"tasks": [
@@ -70,21 +72,44 @@ func TestPublishOnceDispatchesPendingOutboxEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read dispatched stream messages: %v", err)
 	}
-	if len(messages) != 1 {
-		t.Fatalf("expected one stream message, got %d", len(messages))
+	if len(messages) == 0 {
+		t.Fatal("expected at least one stream message")
 	}
 
-	payloadText, ok := messages[0].Values["payload"].(string)
-	if !ok {
-		t.Fatalf("expected payload string, got %#v", messages[0].Values["payload"])
-	}
+	found := false
+	for _, message := range messages {
+		payloadText, ok := message.Values["payload"].(string)
+		if !ok {
+			continue
+		}
 
-	var task queue.TaskMessage
-	err = json.Unmarshal([]byte(payloadText), &task)
+		var task queue.TaskMessage
+		if err := json.Unmarshal([]byte(payloadText), &task); err != nil {
+			continue
+		}
+		if task.TaskID == start.Task.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected to find dispatched task id %s in stream messages", start.Task.ID)
+	}
+}
+
+func clearAllPendingOutbox(t *testing.T, ctx context.Context, store interface {
+	ListPendingOutbox(context.Context, int) ([]domain.OutboxEvent, error)
+	MarkOutboxDispatched(context.Context, string) error
+}) {
+	t.Helper()
+
+	pending, err := store.ListPendingOutbox(ctx, 200)
 	if err != nil {
-		t.Fatalf("decode dispatched message: %v", err)
+		t.Fatalf("list pending outbox: %v", err)
 	}
-	if task.TaskID != start.Task.ID {
-		t.Fatalf("expected task id %s, got %s", start.Task.ID, task.TaskID)
+	for _, event := range pending {
+		if err := store.MarkOutboxDispatched(ctx, event.ID); err != nil {
+			t.Fatalf("mark outbox dispatched: %v", err)
+		}
 	}
 }

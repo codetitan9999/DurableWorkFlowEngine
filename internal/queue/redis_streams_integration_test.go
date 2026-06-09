@@ -70,7 +70,6 @@ func TestConsumeReclaimsAbandonedPendingMessage(t *testing.T) {
 			Block:          50 * time.Millisecond,
 		}, func(_ context.Context, task TaskMessage) error {
 			handled <- task
-			consumeCancel()
 			return nil
 		})
 	}()
@@ -84,11 +83,20 @@ func TestConsumeReclaimsAbandonedPendingMessage(t *testing.T) {
 		t.Fatal("timed out waiting for reclaimed message")
 	}
 
-	pending, err := rawClient.XPending(ctx, streamName, groupName).Result()
-	if err != nil {
-		t.Fatalf("xpending: %v", err)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		pending, err := rawClient.XPending(ctx, streamName, groupName).Result()
+		if err != nil {
+			t.Fatalf("xpending: %v", err)
+		}
+		if pending.Count == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected reclaimed message to be acked, pending count is %d", pending.Count)
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
-	if pending.Count != 0 {
-		t.Fatalf("expected reclaimed message to be acked, pending count is %d", pending.Count)
-	}
+
+	consumeCancel()
 }
