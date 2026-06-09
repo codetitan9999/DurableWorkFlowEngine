@@ -71,17 +71,28 @@ func TestCreateExecutionAndTaskRollbackOnNextTaskConflict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get execution snapshot: %v", err)
 	}
-	if len(snapshot.Tasks) != 1 {
-		t.Fatalf("expected only the original task after rollback, got %d", len(snapshot.Tasks))
+	if len(snapshot.Tasks) != 2 {
+		t.Fatalf("expected original plus seeded conflicting task after rollback, got %d", len(snapshot.Tasks))
 	}
-	if snapshot.Tasks[0].Task.Status != domain.TaskStatusRunning {
-		t.Fatalf("expected original task to remain running after rollback, got %q", snapshot.Tasks[0].Task.Status)
+
+	var originalTask *domain.TaskSnapshot
+	for i := range snapshot.Tasks {
+		if snapshot.Tasks[i].Task.ID == start.Task.ID {
+			originalTask = &snapshot.Tasks[i]
+			break
+		}
 	}
-	if len(snapshot.Tasks[0].Attempts) != 1 {
-		t.Fatalf("expected one attempt after rollback, got %d", len(snapshot.Tasks[0].Attempts))
+	if originalTask == nil {
+		t.Fatal("expected original task to remain present after rollback")
 	}
-	if snapshot.Tasks[0].Attempts[0].Status != domain.TaskAttemptStatusRunning {
-		t.Fatalf("expected attempt to remain running after rollback, got %q", snapshot.Tasks[0].Attempts[0].Status)
+	if originalTask.Task.Status != domain.TaskStatusRunning {
+		t.Fatalf("expected original task to remain running after rollback, got %q", originalTask.Task.Status)
+	}
+	if len(originalTask.Attempts) != 1 {
+		t.Fatalf("expected one attempt after rollback, got %d", len(originalTask.Attempts))
+	}
+	if originalTask.Attempts[0].Status != domain.TaskAttemptStatusRunning {
+		t.Fatalf("expected attempt to remain running after rollback, got %q", originalTask.Attempts[0].Status)
 	}
 }
 
