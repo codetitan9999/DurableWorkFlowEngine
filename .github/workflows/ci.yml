@@ -51,8 +51,24 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U postgres -d durableflow && exit 0
+            sleep 2
+          done
+          exit 1
+
+      - name: Wait for Redis
+        run: |
+          for i in {1..30}; do
+            redis-cli -h localhost -p 6379 ping | grep PONG && exit 0
+            sleep 2
+          done
+          exit 1
+
       - name: Run Go tests
-        run: go test ./...
+        run: go test -count=1 -p 1 ./...
 
   web:
     runs-on: ubuntu-latest
