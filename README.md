@@ -10,6 +10,29 @@ The project is centered on one rule:
 
 That rule drives most of the important tradeoffs in the codebase.
 
+## Quick proof
+
+What this project currently proves:
+
+- transactional outbox keeps dispatch intent in durable state instead of relying on in-memory publish timing
+- retry state is persisted in Postgres through `next_run_at` and materialized later through the outbox
+- dead-letter replay reuses the same durable dispatch path as first-run execution
+- Redis consumer-group reclaim handles abandoned messages through `XAUTOCLAIM`
+- handler-level idempotency prevents duplicate side effects under at-least-once delivery
+
+## System at a glance
+
+```mermaid
+flowchart LR
+    API["API"] --> PG[("Postgres")]
+    API --> Outbox["Outbox publisher"]
+    Outbox --> Redis[("Redis Streams")]
+    Redis --> Worker["Worker"]
+    Worker --> PG
+    API --> Web["Dashboard"]
+    Web --> API
+```
+
 ## What the project does today
 
 DurableFlow currently supports:
@@ -26,7 +49,7 @@ DurableFlow currently supports:
 - Redis consumer-group recovery for stale pending messages
 - handler-level idempotency backed by persisted reservations and stored responses
 - a containerized multi-service local stack with Docker Compose
-- focused tests around orchestration, handler idempotency, worker failure paths, and Redis recovery logic
+- focused unit and integration tests around orchestration, outbox dispatch, retry scheduling, replay, idempotency conflicts, and Redis recovery logic
 
 In practical terms, a workflow can be created, triggered, dispatched asynchronously, retried safely, recovered after failure, replayed after dead-lettering, and inspected end to end.
 
@@ -381,6 +404,7 @@ The codebase is built to be runnable and checkable, not just readable:
 The current tests focus on the areas where correctness matters most:
 
 - workflow orchestration helpers
+- transactional outbox dispatch and rollback-sensitive DB paths
 - worker success, retry, and dead-letter branches
 - handler-level idempotency behavior
 - Redis consumer-group reclaim and queue decoding helpers
