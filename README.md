@@ -189,6 +189,39 @@ For scaling benchmarks, the compose file also includes a `worker-bench` profile 
 - `outbox_events`
 - `idempotency_records`
 
+## Dashboard walkthrough
+
+The dashboard is intentionally small, but each panel maps directly to a core part of the system:
+
+- workflow definition creation
+- execution triggering
+- execution snapshot inspection
+- dead-letter visibility and replay
+
+### 1. Overview
+
+The overview screen shows the full operator surface in its empty state: create a workflow, trigger an execution, inspect the latest API response, and monitor dead-lettered tasks from one place.
+
+![Dashboard overview](docs/screenshots/01-overview.jpeg)
+
+### 2. Successful multi-step execution
+
+This state shows a completed linear workflow. The execution snapshot captures both task instances, their attempts, timestamps, and final `succeeded` status while the response panel shows the latest API payload that drove the UI.
+
+![Successful execution snapshot](docs/screenshots/02-successful-execution.jpeg)
+
+### 3. Dead-letter handling
+
+This state shows a workflow that failed terminally because its handler was intentionally missing. The execution snapshot shows the task as `dead_lettered`, preserves attempt history, and surfaces the terminal error without needing to inspect the database directly.
+
+![Dead-letter handling](docs/screenshots/03-dead-letter-panel.jpeg)
+
+### 4. Replay flow
+
+Replay takes a dead-lettered task, moves it back into the durable dispatch path, and shows the updated state in the same UI. This is useful for recovery demos because replay is not a special one-off command; it reuses the same outbox-driven execution machinery as the original run.
+
+![Replay flow](docs/screenshots/04-replay-response.jpeg)
+
 ## Performance and Boundaries
 
 The project includes local benchmark runs against the real API, outbox publisher, Redis Streams path, and worker execution path. The goal of these runs is to show how the current implementation behaves under load and where the first bottlenecks appear.
@@ -303,39 +336,6 @@ make metrics-rules
 ```
 
 The generated chart report turns one results directory of JSON artifacts into a small Mermaid-based summary that is easy to review in GitHub.
-
-## Dashboard walkthrough
-
-The dashboard is intentionally small, but each panel maps directly to a core part of the system:
-
-- workflow definition creation
-- execution triggering
-- execution snapshot inspection
-- dead-letter visibility and replay
-
-### 1. Overview
-
-The overview screen shows the full operator surface in its empty state: create a workflow, trigger an execution, inspect the latest API response, and monitor dead-lettered tasks from one place.
-
-![Dashboard overview](docs/screenshots/01-overview.jpeg)
-
-### 2. Successful multi-step execution
-
-This state shows a completed linear workflow. The execution snapshot captures both task instances, their attempts, timestamps, and final `succeeded` status while the response panel shows the latest API payload that drove the UI.
-
-![Successful execution snapshot](docs/screenshots/02-successful-execution.jpeg)
-
-### 3. Dead-letter handling
-
-This state shows a workflow that failed terminally because its handler was intentionally missing. The execution snapshot shows the task as `dead_lettered`, preserves attempt history, and surfaces the terminal error without needing to inspect the database directly.
-
-![Dead-letter handling](docs/screenshots/03-dead-letter-panel.jpeg)
-
-### 4. Replay flow
-
-Replay takes a dead-lettered task, moves it back into the durable dispatch path, and shows the updated state in the same UI. This is useful for recovery demos because replay is not a special one-off command; it reuses the same outbox-driven execution machinery as the original run.
-
-![Replay flow](docs/screenshots/04-replay-response.jpeg)
 
 ## Repository map
 
