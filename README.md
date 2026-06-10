@@ -1,5 +1,11 @@
 # DurableFlow
 
+[![CI](https://github.com/codetitan9999/DurableWorkFlowEngine/actions/workflows/ci.yml/badge.svg)](https://github.com/codetitan9999/DurableWorkFlowEngine/actions/workflows/ci.yml)
+
+DurableFlow is a small workflow engine that focuses on the part distributed systems usually get wrong first: keeping background execution correct when retries, crashes, duplicate delivery, and manual recovery all show up together.
+
+Quick links: [Architecture](ARCHITECTURE.md) · [Dashboard walkthrough](#dashboard-walkthrough) · [Postman setup](docs/postman/README.md) · [Benchmarks](docs/benchmarks.md) · [Operations](docs/operations.md) · [Changelog](CHANGELOG.md)
+
 ## Why this exists
 
 Many backend systems need to do work after the original request is gone: send notifications, validate data, fan work out to another step, retry temporary failures, or let an operator recover permanently failed work later.
@@ -50,6 +56,15 @@ What this project currently proves:
 - dead-letter replay reuses the same durable dispatch path as first-run execution
 - Redis consumer-group reclaim handles abandoned messages through `XAUTOCLAIM`
 - handler-level idempotency prevents duplicate side effects under at-least-once delivery
+
+## What to open first
+
+If you are skimming the repo, the fastest path is:
+
+1. Read [ARCHITECTURE.md](ARCHITECTURE.md) for the core design and invariants.
+2. Scan the [dashboard walkthrough](#dashboard-walkthrough) to see the product surface and failure flows.
+3. Open [docs/postman/README.md](docs/postman/README.md) if you want to exercise the APIs quickly.
+4. Check [docs/benchmarks.md](docs/benchmarks.md) and [docs/operations.md](docs/operations.md) for measurement and observability.
 
 ## System at a glance
 
