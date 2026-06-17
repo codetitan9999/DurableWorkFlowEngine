@@ -258,144 +258,28 @@ Replay one dead-lettered task:
 curl -X POST http://localhost:8080/api/tasks/<task-id>/replay
 ```
 
-## Current scope and known limitations
-
-DurableFlow covers a meaningful slice of durable execution, failure handling, and operational recovery in a local multi-service setup.
-
-It is still a focused exploration project, not a production-ready workflow platform.
-
-Current product-scope limits:
+## Known limits
 
 - workflow chaining is linear, not a general DAG
-- workflow definitions are not versioned yet
-- the dashboard is useful for inspection and replay, but it is still lightweight
-- replay exists, but there is no richer operator audit trail yet
-
-Current engineering limits:
-
 - running-task recovery still depends on message redelivery plus Postgres state checks; there is no separate lease or heartbeat model for long-running tasks
 - the outbox path works well in the current single-API local shape, but multi-publisher coordination has not been stress-tested
-- tests are strongest around orchestration and handler behavior; database and outbox integration coverage is still thinner than I would want for a production system
-- benchmark numbers describe local Docker-based behavior and should not be read as production-scale claims
+- workflow definitions are not versioned yet
+- the dashboard is intentionally lightweight
+- replay exists, but there is no richer operator audit trail yet
+- benchmark numbers are local Docker-based measurements, not production claims
 
-If I kept pushing this project, the next improvements would be stronger DB/outbox integration tests, clearer replay audit history, and a more explicit recovery model for long-running tasks.
+## Performance snapshot
 
-## Performance and Boundaries
+- default `OUTBOX_POLL_INTERVAL=2s`: about `~5 exec/s` for a 2-step workflow
+- tuned `OUTBOX_POLL_INTERVAL=100ms`: about `~99 exec/s` at `200` concurrent executions
+- after interrupting `1` of `3` workers, the system still sustained about `~98 exec/s`
+- losing the only worker causes a large latency spike, but work still recovers after reclaim
 
-The project includes local benchmark runs against the real API, outbox publisher, Redis Streams path, and worker execution path. The goal of these runs is to show how the current implementation behaves under load and where the first bottlenecks appear.
-
-### Default runtime shape
-
-With the default `OUTBOX_POLL_INTERVAL=2s`, the `2-step` happy-path workflow plateaued at roughly `~5 exec/s`:
-
-- `120` executions, concurrency `30`: `4.99 exec/s`, reported latency avg `5.79s`, p95 `5.98s`
-- `240` executions, concurrency `60`: `4.99 exec/s`, reported latency avg `11.47s`, p95 `11.99s`
-
-This lines up with the current design:
-
-- outbox publisher drains up to `20` rows per poll
-- default poll interval is `2s`
-- a `2-step` workflow needs `2` dispatches per execution
-- theoretical ceiling is therefore about `~5 exec/s`
-
-### Tuned runtime shape
-
-To check whether that ceiling came from the overall design or from a specific runtime setting, the API was rerun with `OUTBOX_POLL_INTERVAL=100ms` and no code changes. Under that tuned setting, the same `2-step` workflow sustained roughly `~99 exec/s`:
-
-- `240` executions, concurrency `60`: `97.30 exec/s`, avg `462ms`, p95 `524ms`
-- `1000` executions, concurrency `200`: `98.92 exec/s`, avg `1.80s`, p95 `1.97s`
-- `5000` executions, concurrency `500`, `1s` polling: `99.28 exec/s`, avg `4.43s`, p95 `4.92s`
-- `10000` executions, concurrency `1000`, `1s` polling: `99.45 exec/s`, avg `9.26s`, p95 `9.86s`
-
-This suggests that the first boundary in the default setup was mainly publisher cadence, not worker count.
-
-### Failure-path behavior
-
-The benchmark suite also measured the failure and recovery paths:
-
-- persisted retries, `3` attempts, `1s` backoff: `0.53 exec/s` by default and `1.25 exec/s` under the tuned outbox cadence, with exactly `3` attempts per execution
-- immediate dead-letter on missing handler: `1.38 exec/s`, avg `1.58s`, p95 `1.83s`
-- replay of a dead-lettered task through the normal dispatch path: avg `3.77s`, p95 `3.93s`, with exactly `2` attempts per execution
-
-### Crash recovery
-
-One run intentionally stopped the only worker mid-flight, waited through the reclaim window, then restarted it:
-
-- all `20/20` executions still succeeded
-- throughput dropped to `0.29 exec/s`
-- reported latency avg rose to `16.77s`
-- reported latency p95 rose to `55.82s`
-- attempts per execution still stayed at `2`
-
-This shows that consumer failure can delay work significantly while the system still recovers without losing work.
-
-### Soak and mixed workload checks
-
-The default `100 exec / 20 concurrency` happy-path shape was also repeated `30` times as a soak run:
-
-- throughput avg stayed at `5.01 exec/s`
-- reported latency p95 avg stayed at `3.95s`
-- first-5 vs last-5 run averages stayed nearly flat
-
-A mixed workload run combined success, retry, dead-letter, and replay traffic in parallel:
-
-- happy-path throughput dropped to `3.64 exec/s`
-- happy-path reported p95 stayed near the normal range at `3.90s`
-
-That suggests mixed failure traffic reduced the share of throughput available to the happy path before it caused a major latency spike.
-
-### Multi-worker benchmarks
-
-The repo now includes a scale-only `worker-bench` profile for multi-worker runs. With the API kept in the tuned `OUTBOX_POLL_INTERVAL=100ms` shape:
-
-- `1000` executions at concurrency `200` with `1` worker averaged `98.95 exec/s`
-- the same workload with `3` workers averaged `99.39 exec/s`
-
-At this workload and with the built-in handlers, extra workers did not materially change throughput.
-
-One extra worker was also stopped during a tuned run while the rest of the consumer group stayed alive:
-
-- `500` executions at concurrency `100`
-- throughput stayed at `98.14 exec/s`
-- reported latency p95 stayed under `1s`
-
-That is very different from losing the only worker, and it shows the consumer group can absorb partial worker loss without a large drop in throughput.
-
-### Current boundary story
-
-At this point, the current measurements suggest:
-
-- default-shape throughput is outbox-cadence bound at about `~5 exec/s`
-- tuned happy-path throughput sustains about `~99 exec/s` in the local environment for the current `2-step` workflow
-- the default happy-path shape stays stable over repeated soak runs without meaningful drift in throughput or tail latency
-- adding more workers did not materially improve the tuned happy-path benchmark for the current handlers, which suggests the next bottleneck is still upstream of raw worker parallelism
-- mixed success, retry, dead-letter, and replay traffic reduces happy-path throughput before it causes a large p95 latency jump
-- under extremely aggressive snapshot polling, the control-plane read path becomes a separate limit before the workflow engine itself fails
-
-The full methodology, scenario list, and measured results live in [docs/benchmarks.md](docs/benchmarks.md).
-
-### Reproducing benchmark runs
-
-The repo includes a small benchmark runner plus helper scripts:
-
-- [scripts/run_bench_suite.sh](scripts/run_bench_suite.sh)
-- [scripts/generate_benchmark_charts.sh](scripts/generate_benchmark_charts.sh)
-- [benchmarks/results/2026-06-05/charts.md](benchmarks/results/2026-06-05/charts.md)
-- [docs/operations.md](docs/operations.md)
-
-Useful commands:
-
-```bash
-make bench-suite
-make bench-charts
-make metrics-api
-make metrics-worker
-make metrics-rules
-```
-
-The generated chart report turns one results directory of JSON artifacts into a small Mermaid-based summary that is easy to review in GitHub.
+Full benchmark runs and methodology live in [docs/benchmarks.md](docs/benchmarks.md).
 
 ## What to read next
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) for a deeper explanation of the system design
+- [docs/benchmarks.md](docs/benchmarks.md) for the full benchmark results and methodology
+- [docs/operations.md](docs/operations.md) for observability, alerts, and operating checks
 - [TASKS.md](TASKS.md) for the implementation history and remaining roadmap
