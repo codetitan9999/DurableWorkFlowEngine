@@ -2,284 +2,109 @@
 
 [![CI](https://github.com/codetitan9999/DurableWorkFlowEngine/actions/workflows/ci.yml/badge.svg)](https://github.com/codetitan9999/DurableWorkFlowEngine/actions/workflows/ci.yml)
 
-DurableFlow is a Go-based workflow engine for multi-step background jobs. It uses Postgres for durable execution state, Redis Streams for async delivery, and a small React dashboard for inspection and replay.
+DurableFlow is a small workflow engine for multi-step background jobs, built in Go with Postgres, Redis Streams, and a React operations dashboard. It demonstrates how to make retries, crash recovery, replay, and duplicate-safe side effects explicit instead of hiding them behind a queue.
 
-Quick links: [Architecture](ARCHITECTURE.md) · [Dashboard walkthrough](#dashboard-walkthrough) · [Postman setup](docs/postman/README.md) · [Benchmarks](docs/benchmarks.md) · [Operations](docs/operations.md) · [Changelog](CHANGELOG.md)
+**The one-minute insight:** Postgres decides what should happen; Redis delivers opportunities to do the work. Because delivery is at least once, workers re-check durable state and handlers protect side effects with persisted idempotency records.
 
-## Why this project exists
+[Architecture](ARCHITECTURE.md) · [API walkthrough](docs/postman/README.md) · [Benchmarks](docs/benchmarks.md) · [Operations](docs/operations.md) · [Changelog](CHANGELOG.md)
 
-Background jobs look easy until failure shows up in the middle:
+## Why durable workflows are hard
 
-- state is written but work is not published
-- a task is delivered more than once
-- retries need to survive restarts
-- a permanently failed task needs safe replay
-- a worker crashes after claiming a message
+A background job is straightforward until failure lands between two operations:
 
-DurableFlow is a small project built to handle those cases explicitly.
+- the database commit succeeds but queue publication does not
+- a worker performs work and crashes before acknowledging the message
+- a retry is scheduled and the process restarts
+- a permanently failed task needs to be repaired and replayed safely
 
-## What it supports
+DurableFlow handles these cases with three invariants:
 
-- transactional outbox-based dispatch
-- durable retries with persisted `next_run_at`
-- dead-letter handling and replay
-- Redis consumer-group reclaim with `XAUTOCLAIM`
-- handler-level idempotency for duplicate-safe side effects
-- execution snapshots and a lightweight operations dashboard
+1. **Postgres is authoritative.** Executions, tasks, attempts, retry times, dead-letter state, dispatch intent, and idempotency records are durable.
+2. **Every dispatch uses the transactional outbox.** Initial tasks, retries, next steps, and replays all enter Redis through the same path.
+3. **Duplicate delivery is expected.** Workers consult Postgres before execution; side-effecting handlers reserve durable idempotency keys.
 
-## Core idea
-
-- Postgres is the source of truth.
-- Redis Streams is transport, not truth.
-- Delivery is at-least-once, so the system must tolerate duplicates.
-
-## Quick proof
-
-- workflow state, attempts, retries, dead-letter state, and idempotency records are stored in Postgres
-- every dispatch path goes through the outbox, including retries and replay
-- reclaimed Redis messages are checked against Postgres before work is run again
-- duplicate side effects are blocked through persisted idempotency reservations and stored responses
-
-## System at a glance
+## Architecture
 
 ```mermaid
 flowchart LR
-    API["API"] --> PG[("Postgres")]
-    API --> Outbox["Outbox publisher"]
-    Outbox --> Redis[("Redis Streams")]
-    Redis --> Worker["Worker"]
-    Worker --> PG
-    API --> Web["Dashboard"]
-    Web --> API
+    Client["Dashboard / API client"] --> API["API + outbox publisher"]
+    API -->|transaction: execution, task, outbox| PG[("Postgres")]
+    API -->|publish pending outbox rows| Redis[("Redis Streams")]
+    Redis -->|read or reclaim| Worker["Worker"]
+    Worker -->|attempts, retry, result, next task| PG
+    Worker --> Handler["Idempotent handler"]
 ```
 
-## Start here
+A workflow run follows one durable loop:
 
-If you are skimming the repo, this is the fastest path:
+1. The API stores an execution, its first task, and an outbox row in one transaction.
+2. The publisher sends pending outbox events to a Redis consumer group.
+3. A worker loads authoritative task state, records an attempt, and runs the handler.
+4. Success creates the next task or completes the execution. Failure persists a future `next_run_at` or dead-letters the task.
+5. A crashed worker's pending message can be reclaimed with `XAUTOCLAIM`; replay resets eligible state and re-enters through the outbox.
 
-1. Read [ARCHITECTURE.md](ARCHITECTURE.md).
-2. Scan the [dashboard walkthrough](#dashboard-walkthrough).
-3. Use the [Postman collection](docs/postman/README.md).
-4. Open [docs/benchmarks.md](docs/benchmarks.md) and [docs/operations.md](docs/operations.md) if you want the measurement and observability details.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for lifecycle diagrams, data-model details, and code entry points.
 
-## Dashboard walkthrough
+## What is implemented
 
-### 1. Overview
-
-Create a workflow, trigger an execution, inspect the latest API response, and monitor dead-lettered tasks from one place.
-
-![Dashboard overview](docs/screenshots/01-overview.jpeg)
-
-### 2. Successful multi-step execution
-
-Completed linear workflow with both task instances and final `succeeded` status visible in the execution snapshot.
-
-![Successful execution snapshot](docs/screenshots/02-successful-execution.jpeg)
-
-### 3. Dead-letter handling
-
-Terminal failure with attempt history, error details, and dead-letter visibility in the same UI.
-
-![Dead-letter handling](docs/screenshots/03-dead-letter-panel.jpeg)
-
-### 4. Replay flow
-
-Replay moves a dead-lettered task back through the normal durable dispatch path instead of using a special recovery shortcut.
-
-![Replay flow](docs/screenshots/04-replay-response.jpeg)
-
-## Tech highlights
-
-- workflow definition storage and validation
-- execution creation from stored definitions
-- transactional task creation plus outbox dispatch intent
-- asynchronous task dispatch through Redis Streams
-- durable task attempts and execution snapshots
-- retry scheduling with persisted `next_run_at`
-- outbox-based redispatch for delayed retries
-- linear multi-step workflow chaining through `next_task`
-- dead-lettered task handling with list and replay support
+- Definition-driven, linear multi-step workflows
+- Durable attempts and scheduled retries that survive restarts
+- Dead-letter inspection and replay through the normal dispatch path
 - Redis consumer-group recovery for stale pending messages
-- handler-level idempotency backed by persisted reservations and stored responses
-- a containerized multi-service local stack with Docker Compose
-- focused unit and integration tests around orchestration, outbox dispatch, retry scheduling, replay, idempotency conflicts, and Redis recovery logic
+- Handler-level idempotency with stored successful responses
+- Execution snapshots, OpenTelemetry metrics, Prometheus alerts, Grafana, and a lightweight React dashboard
+- Unit and integration coverage for orchestration, dispatch, retries, replay, idempotency, and reclaim logic
 
-## Stack
+![DurableFlow dashboard showing workflow controls and execution status](docs/screenshots/01-overview.jpeg)
 
-### Services
+## Evidence, with boundaries
 
-- `api`: HTTP API plus outbox publisher
-- `worker`: Redis Streams consumer and task executor
-- `web`: React dashboard for workflow creation, inspection, dead-letter visibility, and replay
+The repository includes a benchmark harness that drives the real HTTP API and waits for terminal execution snapshots.
 
-### Infrastructure in the local stack
+| Local Docker scenario | Result | What it supports |
+| --- | ---: | --- |
+| 2-step workflow, default `2s` outbox polling | ~5 executions/s | Publisher cadence is the first default bottleneck |
+| 2-step workflow, `100ms` polling, 1,000 runs at concurrency 200 | ~99 executions/s | Tuned local happy-path capacity |
+| 3 workers with 1 interrupted, 500 runs at concurrency 100 | ~98 executions/s; p95 942 ms | Remaining consumers absorb partial worker loss |
+| Only worker interrupted, 20 runs | All succeeded; p95 55.82 s | Reclaim restores work, with a substantial latency cost |
 
-- Postgres
-- Redis
-- OpenTelemetry collector
-- Prometheus
-- Grafana
+These are **local Docker measurements, not production claims**. The ~5 and ~99 results use different workloads as well as different poll intervals, so they identify outbox cadence as a bottleneck; they do not establish a general “20× faster” claim. Full workloads, methodology, failure-path results, soak data, and caveats are in [docs/benchmarks.md](docs/benchmarks.md).
 
-For scaling benchmarks, the compose file also includes a `worker-bench` profile that starts extra consumers in the same Redis group without publishing additional host ports.
+## Run locally
 
-### Core tables
-
-- `workflow_definitions`
-- `workflow_executions`
-- `task_instances`
-- `task_attempts`
-- `outbox_events`
-- `idempotency_records`
-
-## Repository map
-
-```text
-apps/
-  api/       API entrypoint and outbox loop
-  worker/    Worker entrypoint and task execution path
-  web/       React operations dashboard
-internal/
-  config/       environment and runtime configuration
-  db/           Postgres access, migrations, idempotency store
-  domain/       shared domain models and statuses
-  handlers/     sample handlers and idempotency-aware side effects
-  httpapi/      HTTP routing and JSON handlers
-  orchestrator/ workflow creation and worker orchestration logic
-  outbox/       durable outbox polling and publish logic
-  queue/        Redis Streams adapter and stale-message reclaim
-  telemetry/    tracing and metrics bootstrap
-migrations/     SQL schema evolution
-deployments/    local observability config
-```
-
-## Where to look in code
-
-- [ARCHITECTURE.md](ARCHITECTURE.md) for the design and invariants
-- [migrations/001_init.sql](migrations/001_init.sql) for the data model
-- [internal/orchestrator/service.go](internal/orchestrator/service.go) for execution creation
-- [internal/outbox/publisher.go](internal/outbox/publisher.go) for dispatch
-- [internal/orchestrator/worker.go](internal/orchestrator/worker.go) for retry, chaining, and failure handling
-- [internal/queue/redis_streams.go](internal/queue/redis_streams.go) for Redis Streams delivery and reclaim
-- [internal/db/idempotency.go](internal/db/idempotency.go) for idempotency ownership and stored responses
-
-## Quick start
-
-### Prerequisites
-
-- Docker
-- Docker Compose v2
-
-Optional for running services outside Docker:
-
-- Go 1.23+
-- Node 22+ with npm
-
-### Start the stack
+Prerequisites: Docker and Docker Compose v2.
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-## Local endpoints
+Then open:
 
 - Dashboard: [http://localhost:5173](http://localhost:5173)
 - API health: [http://localhost:8080/healthz](http://localhost:8080/healthz)
 - Worker health: [http://localhost:8081/healthz](http://localhost:8081/healthz)
-- Prometheus: [http://localhost:9090](http://localhost:9090)
-- Grafana: [http://localhost:3000](http://localhost:3000)
+- Grafana: [http://localhost:3000](http://localhost:3000) (`admin` / `admin`)
 
-## Validate locally
+Import the included [Postman collection and local environment](docs/postman/README.md) to create a workflow, trigger an execution, inspect its snapshot, and exercise dead-letter replay.
 
-- Run backend tests with `go test ./...`
-- Build the web app with `npm --prefix apps/web run build`
-- Use the [Postman collection](docs/postman/README.md) for API checks
-- See [docs/benchmarks.md](docs/benchmarks.md) for load runs
-- See [docs/operations.md](docs/operations.md) for observability and runbook checks
-
-## Minimal API examples
-
-Create a workflow:
+For a source-level check:
 
 ```bash
-curl -X POST http://localhost:8080/api/workflows \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "name": "demo-order-flow",
-    "description": "Linear workflow demo",
-    "definition": {
-      "entry_task": "validate-order",
-      "tasks": [
-        {
-          "name": "validate-order",
-          "handler_key": "sample.echo",
-          "next_task": "send-notification",
-          "max_attempts": 3,
-          "backoff_seconds": 10
-        },
-        {
-          "name": "send-notification",
-          "handler_key": "notifications.send"
-        }
-      ]
-    }
-  }'
+go test ./...
+npm --prefix apps/web ci
+npm --prefix apps/web run build
 ```
 
-Trigger an execution:
+## Scope and tradeoffs
 
-```bash
-curl -X POST http://localhost:8080/api/executions \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "workflow_definition_id": "<workflow-definition-id>",
-    "input": {
-      "order_id": "demo-order-123",
-      "customer_email": "demo@example.com"
-    }
-  }'
-```
+DurableFlow intentionally favors a clear durability model over broad workflow syntax. Chaining is linear rather than a general DAG; definitions are not versioned; long-running tasks have no separate lease or heartbeat; multi-publisher behavior has not been stress-tested; and replay lacks a richer operator audit trail.
 
-Inspect one execution:
+## Go deeper
 
-```bash
-curl http://localhost:8080/api/executions/<execution-id>
-```
-
-List dead-lettered tasks:
-
-```bash
-curl http://localhost:8080/api/dead-letter-tasks?limit=10
-```
-
-Replay one dead-lettered task:
-
-```bash
-curl -X POST http://localhost:8080/api/tasks/<task-id>/replay
-```
-
-## Known limits
-
-- workflow chaining is linear, not a general DAG
-- running-task recovery still depends on message redelivery plus Postgres state checks; there is no separate lease or heartbeat model for long-running tasks
-- the outbox path works well in the current single-API local shape, but multi-publisher coordination has not been stress-tested
-- workflow definitions are not versioned yet
-- the dashboard is intentionally lightweight
-- replay exists, but there is no richer operator audit trail yet
-- benchmark numbers are local Docker-based measurements, not production claims
-
-## Performance snapshot
-
-- default `OUTBOX_POLL_INTERVAL=2s`: about `~5 exec/s` for a 2-step workflow
-- tuned `OUTBOX_POLL_INTERVAL=100ms`: about `~99 exec/s` at `200` concurrent executions
-- after interrupting `1` of `3` workers, the system still sustained about `~98 exec/s`
-- losing the only worker causes a large latency spike, but work still recovers after reclaim
-
-Full benchmark runs and methodology live in [docs/benchmarks.md](docs/benchmarks.md).
-
-## What to read next
-
-- [ARCHITECTURE.md](ARCHITECTURE.md) for a deeper explanation of the system design
-- [docs/benchmarks.md](docs/benchmarks.md) for the full benchmark results and methodology
-- [docs/operations.md](docs/operations.md) for observability, alerts, and operating checks
-- [TASKS.md](TASKS.md) for the implementation history and remaining roadmap
+- [Architecture](ARCHITECTURE.md): invariants, components, data model, lifecycle, and code map
+- [Happy path](docs/happy-path.md): shortest source-guided execution trace
+- [Benchmarks](docs/benchmarks.md): methodology, full results, rerun commands, and caveats
+- [Operations](docs/operations.md): health checks, metrics, alerts, and incident guidance
+- [Postman setup](docs/postman/README.md): runnable API happy path and replay flow
+- [Implementation history and roadmap](TASKS.md): completed work and remaining tasks
