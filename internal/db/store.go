@@ -360,7 +360,10 @@ func (s *Store) StartTaskAttempt(ctx context.Context, taskID string) (domain.Tas
 		return domain.TaskInstance{}, domain.TaskAttempt{}, false, err
 	}
 
-	if task.Status == domain.TaskStatusSucceeded || task.Status == domain.TaskStatusRunning || task.Status == domain.TaskStatusDeadLettered {
+	// Only terminal states should short-circuit redelivery. A task that is still
+	// marked running may have been abandoned after a worker crash, so a reclaimed
+	// message must be able to create a new attempt and resume progress.
+	if task.Status == domain.TaskStatusSucceeded || task.Status == domain.TaskStatusDeadLettered {
 		return task, domain.TaskAttempt{}, true, tx.Commit(ctx)
 	}
 
