@@ -96,6 +96,63 @@ func TestCreateExecutionAndTaskRollbackOnNextTaskConflict(t *testing.T) {
 	}
 }
 
+func TestStartTaskAttemptAllowsRecoveryFromRunningState(t *testing.T) {
+	store, _ := testutil.OpenIntegrationStore(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	definition := mustCreateWorkflowDefinition(t, ctx, store, fmt.Sprintf("running-recovery-%d", time.Now().UnixNano()))
+	start := mustCreateExecution(t, ctx, store, definition.ID)
+
+	firstTask, firstAttempt, alreadyCompleted, err := store.StartTaskAttempt(ctx, start.Task.ID)
+	if err != nil {
+		t.Fatalf("start first attempt: %v", err)
+	}
+	if alreadyCompleted {
+		t.Fatal("expected first delivery to be runnable")
+	}
+	if firstTask.Status != domain.TaskStatusRunning {
+		t.Fatalf("expected task to be running after first attempt, got %q", firstTask.Status)
+	}
+
+	recoveredTask, recoveredAttempt, alreadyCompleted, err := store.StartTaskAttempt(ctx, start.Task.ID)
+	if err != nil {
+		t.Fatalf("start recovered attempt: %v", err)
+	}
+	if alreadyCompleted {
+		t.Fatal("expected running task to be recoverable on redelivery")
+	}
+	if recoveredAttempt.ID == firstAttempt.ID {
+		t.Fatal("expected recovered delivery to create a new attempt")
+	}
+	if recoveredAttempt.AttemptNumber != firstAttempt.AttemptNumber+1 {
+		t.Fatalf("expected attempt number %d, got %d", firstAttempt.AttemptNumber+1, recoveredAttempt.AttemptNumber)
+	}
+	if recoveredTask.Status != domain.TaskStatusRunning {
+		t.Fatalf("expected recovered task to remain running, got %q", recoveredTask.Status)
+	}
+	if recoveredTask.AttemptsTotal != 2 {
+		t.Fatalf("expected attempts_total to be 2 after recovery, got %d", recoveredTask.AttemptsTotal)
+	}
+
+	snapshot, err := store.GetExecutionSnapshot(ctx, start.Execution.ID)
+	if err != nil {
+		t.Fatalf("get execution snapshot: %v", err)
+	}
+	if len(snapshot.Tasks) != 1 {
+		t.Fatalf("expected one task in snapshot, got %d", len(snapshot.Tasks))
+	}
+	if len(snapshot.Tasks[0].Attempts) != 2 {
+		t.Fatalf("expected two attempts in snapshot, got %d", len(snapshot.Tasks[0].Attempts))
+	}
+	if snapshot.Tasks[0].Attempts[0].Status != domain.TaskAttemptStatusRunning {
+		t.Fatalf("expected original attempt to remain running, got %q", snapshot.Tasks[0].Attempts[0].Status)
+	}
+	if snapshot.Tasks[0].Attempts[1].Status != domain.TaskAttemptStatusRunning {
+		t.Fatalf("expected recovered attempt to start running, got %q", snapshot.Tasks[0].Attempts[1].Status)
+	}
+}
+
 func TestRetrySchedulingMaterializesOutboxEvent(t *testing.T) {
 	store, _ := testutil.OpenIntegrationStore(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
