@@ -55,7 +55,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for lifecycle diagrams, data-model detail
 - Execution snapshots, OpenTelemetry metrics, Prometheus alerts, Grafana, and a lightweight React dashboard
 - Unit and integration coverage for orchestration, dispatch, retries, replay, idempotency, and reclaim logic
 
-![DurableFlow dashboard showing workflow controls and execution status](docs/screenshots/01-overview.jpeg)
+![DurableFlow dashboard showing workflow controls and execution status](docs/screenshots/01-overview.png)
 
 ## Evidence, with boundaries
 
