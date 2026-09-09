@@ -258,3 +258,58 @@ sequenceDiagram
 If publication succeeds but marking the row fails, a later poll can publish it again. Payload decoding failures are also recorded and leave the row pending. `ListPendingOutbox` does not claim rows exclusively, so concurrent publishers can select the same events. The `SKIP LOCKED` used for due retries does not extend to this query.
 
 Source: [publisher.go](../internal/outbox/publisher.go), [redis_streams.go](../internal/queue/redis_streams.go), and the outbox methods in [store.go](../internal/db/store.go).
+
+## Execution and chaining
+
+The queue invokes the injected worker callback. The worker resolves the workflow from Postgres, starts an attempt, and selects the handler from the registry. This diagram shows successful persistence; the ACK rule below also applies to failures.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant R as Redis
+    participant Q as RedisStreams
+    participant W as Worker
+    participant S as Store
+    participant G as Registry
+    participant H as Handler
+    Q->>R: XREADGROUP for new messages
+    R-->>Q: Message becomes pending in the consumer group
+    Q->>W: HandleDispatchedTask(message)
+    W->>S: Load task, execution, definition
+    W->>W: Resolve task spec
+    W->>S: StartTaskAttempt(taskID)
+    Note over W,S: Transaction locks task<br/>Creates attempt and sets running unless terminal
+    S-->>W: Task, attempt, alreadyCompleted
+    alt Task is succeeded or dead_lettered
+        W-->>Q: nil (skip handler)
+    else Attempt created
+        W->>G: Get(task.HandlerKey)
+        G-->>W: Handler
+        W->>H: Handle(ctx, task)
+        H-->>W: Output
+        W->>W: FindNextTaskSpec
+        alt Next task exists
+            W->>S: CompleteTaskAttemptAndEnqueueNextTask(..., output)
+            Note over W,S: One transaction: finish attempt and task<br/>Insert next task and outbox
+            Note over W,S: Next task input is this output<br/>Execution remains running
+        else Final task
+            W->>S: CompleteTaskAttempt(taskID, attemptID, output)
+            Note over W,S: One transaction: attempt, task, and execution succeed
+        end
+        S-->>W: Commit succeeded
+        W-->>Q: nil
+    end
+    Q->>R: XACK message
+```
+
+The next task is published through the ordinary outbox loop. Any failed write in the completion transaction rolls back the entire transition, including next-task creation.
+
+| Worker callback result | Queue action |
+| --- | --- |
+| `nil`: completed, terminal task skipped, retry persisted, or dead-letter persisted | Attempt `XACK` |
+| Error loading state or persisting an outcome | Leave message pending for reclaim |
+| Payload cannot be decoded before the callback | Return an error from the consumer; worker startup cancels its context |
+
+A successful ACK removes the pending entry, not the stream entry. ACK failure exits the consumer; later redelivery is still possible.
+
+Source: [worker.go](../internal/orchestrator/worker.go), [store.go](../internal/db/store.go), and [queue processing](../internal/queue/redis_streams.go). The [rollback regression test](../internal/db/store_integration_test.go) checks that a next-task conflict does not partially complete the current task.
