@@ -99,3 +99,49 @@ classDiagram
 ```
 
 `DispatchedAt` is nullable. `AggregateID` refers to the task; Redis serializes `TaskMessage` as JSON in the stream entry's `payload` field. Source: [domain models](../internal/domain/models.go), [publisher](../internal/outbox/publisher.go), and [queue models](../internal/queue/redis_streams.go).
+
+## Handler strategy and persistence contract
+
+`Worker` selects a handler using the persisted task's `HandlerKey`. Both built-in implementations satisfy the same contract. `Registry` holds existing handler objects in a map; it does not construct a new handler for every delivery.
+
+```mermaid
+classDiagram
+    direction TB
+    class Worker {
+        +HandleDispatchedTask(ctx, message) error
+    }
+    class Registry {
+        -map handlers
+        +Get(key) Handler, bool
+    }
+    class Handler {
+        <<interface>>
+        +Key() string
+        +Handle(ctx, task) RawMessage, error
+    }
+    class SampleEchoHandler {
+        +Key() string
+        +Handle(ctx, task) RawMessage, error
+    }
+    class NotificationSendHandler {
+        +Key() string
+        +Handle(ctx, task) RawMessage, error
+    }
+    class idempotencyStore {
+        <<interface>>
+        +BeginIdempotentTask(ctx, handlerKey, key, ownerTaskID)
+        +CompleteIdempotentTask(ctx, handlerKey, key, ownerTaskID, response) error
+        +ReleaseIdempotentTask(ctx, handlerKey, key, ownerTaskID) error
+    }
+    class Store
+    Worker --> Registry : Get task.HandlerKey
+    Worker ..> Handler : Handle
+    Registry "1" o-- "0..*" Handler : handlers
+    SampleEchoHandler ..|> Handler
+    NotificationSendHandler ..|> Handler
+    SampleEchoHandler --> idempotencyStore
+    NotificationSendHandler --> idempotencyStore
+    Store ..|> idempotencyStore
+```
+
+Source: [registry](../internal/handlers/registry.go), [echo handler and persistence interface](../internal/handlers/sample_handler.go), [notification handler](../internal/handlers/notification_handler.go), and [idempotency store](../internal/db/idempotency.go).
