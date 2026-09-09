@@ -483,3 +483,31 @@ The recovery fix allows `running` tasks to start another attempt instead of bein
 The idle threshold is not a heartbeat or task lease: a slow live worker can also have its message reclaimed. Row locks protect individual state-change transactions, but are released before handler execution. There is no attempt fencing to prevent an older worker from writing an outcome later. The current reclaim call also restarts at `0-0` and discards the returned scan cursor.
 
 Source: [reclaim and ACK code](../internal/queue/redis_streams.go), [attempt creation](../internal/db/store.go), [running-task regression test](../internal/db/store_integration_test.go), and [Redis reclaim test](../internal/queue/redis_streams_integration_test.go). These tests cover attempt recreation and message reclaim separately; they are not proof of exclusive execution during overlapping recovery.
+
+## Snapshot reads
+
+The dashboard polls the execution API every two seconds after an execution is selected. The store loads attempts for all tasks in one query and groups them by task ID.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant UI as Dashboard
+    participant API as Router and Service
+    participant S as Store
+    participant PG as PostgreSQL
+    UI->>API: GET /api/executions/{id}
+    API->>S: GetExecutionSnapshot(executionID)
+    S->>PG: SELECT execution
+    PG-->>S: WorkflowExecution
+    S->>PG: SELECT tasks ordered by created_at
+    PG-->>S: TaskInstance rows
+    S->>PG: SELECT attempts JOIN tasks for execution
+    PG-->>S: Attempts ordered by task ID and attempt number
+    S->>S: Group attempts, assemble TaskSnapshot list
+    S-->>API: ExecutionSnapshot
+    API-->>UI: 200 with execution, tasks, and attempts
+```
+
+These are separate queries, not one repeatable-read transaction. Concurrent worker updates can therefore produce a response containing observations from different moments; later polls refresh it.
+
+Source: [dashboard polling](../apps/web/src/App.tsx), [snapshot route](../internal/httpapi/router.go), and [snapshot queries](../internal/db/store.go).
