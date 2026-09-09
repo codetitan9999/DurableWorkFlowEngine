@@ -220,3 +220,41 @@ sequenceDiagram
 The API response confirms creation, not task completion. An API crash after commit leaves the outbox row available to the publisher. Client retries of the trigger request are not deduplicated by the task's idempotency key; they can create another execution.
 
 Source: [router](../internal/httpapi/router.go), [service](../internal/orchestrator/service.go), and `CreateExecutionAndTask` in [store.go](../internal/db/store.go).
+
+## Outbox dispatch
+
+The publisher first materializes due retries, then reads up to 20 pending outbox rows. Task input remains in Postgres; Redis receives identifiers in `TaskMessage`.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Publisher
+    participant S as Store
+    participant Q as RedisStreams
+    participant R as Redis
+    loop Each publishOnce call
+        P->>S: EnqueueDueTaskRetries(ctx, 20)
+        P->>S: ListPendingOutbox(ctx, 20)
+        S-->>P: Undispatched events whose available_at is due
+        loop Each event
+            P->>P: Decode DispatchTaskPayload
+            P->>Q: DispatchTask(TaskMessage)
+            Q->>R: XADD stream payload
+            alt Publish succeeds
+                R-->>Q: Stream message ID
+                Q-->>P: nil
+                Note over P,R: Crash here leaves a message AND an undispatched outbox row
+                P->>S: MarkOutboxDispatched(eventID)
+                S-->>P: Persist dispatched_at and increment attempt_count
+            else Publish fails
+                Q-->>P: Error
+                P->>S: RecordOutboxFailure(eventID, error)
+                Note over P,S: Row remains eligible for a later poll
+            end
+        end
+    end
+```
+
+If publication succeeds but marking the row fails, a later poll can publish it again. Payload decoding failures are also recorded and leave the row pending. `ListPendingOutbox` does not claim rows exclusively, so concurrent publishers can select the same events. The `SKIP LOCKED` used for due retries does not extend to this query.
+
+Source: [publisher.go](../internal/outbox/publisher.go), [redis_streams.go](../internal/queue/redis_streams.go), and the outbox methods in [store.go](../internal/db/store.go).
