@@ -145,3 +145,19 @@ classDiagram
 ```
 
 Source: [registry](../internal/handlers/registry.go), [echo handler and persistence interface](../internal/handlers/sample_handler.go), [notification handler](../internal/handlers/notification_handler.go), and [idempotency store](../internal/db/idempotency.go).
+
+## Dependency injection
+
+Each `main` function creates the dependencies and passes them to constructors. The API and worker are separate processes with separate store and queue objects, connected to the same infrastructure.
+
+### API process
+
+```mermaid
+flowchart TB
+    AP["Postgres pool"] --> AS["db.NewStore(pool)"]
+    AS --> SV["NewService(store, logger)"]
+    SV --> RT["NewRouter(logger, service, healthFn)"]
+    AS --> PU["NewPublisher(store, streams, interval, logger)"]
+    AQ["NewRedisStreams(...)"] --> PU
+    PU --> LOOP["Publisher.Run goroutine"]
+```
