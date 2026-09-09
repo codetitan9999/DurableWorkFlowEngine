@@ -313,3 +313,37 @@ The next task is published through the ordinary outbox loop. Any failed write in
 A successful ACK removes the pending entry, not the stream entry. ACK failure exits the consumer; later redelivery is still possible.
 
 Source: [worker.go](../internal/orchestrator/worker.go), [store.go](../internal/db/store.go), and [queue processing](../internal/queue/redis_streams.go). The [rollback regression test](../internal/db/store_integration_test.go) checks that a next-task conflict does not partially complete the current task.
+
+## Retries
+
+Any handler error is retried while `attempt.AttemptNumber < MaxAttempts`. An omitted or zero `MaxAttempts` becomes one. The delay is a fixed `BackoffSeconds` per retry, with no exponential growth or jitter.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant H as Handler
+    participant W as Worker
+    participant S as Store
+    participant PG as PostgreSQL
+    participant Q as RedisStreams
+    participant P as Publisher
+    H-->>W: Error, with attempts remaining
+    W->>W: nextRunAt = now + BackoffSeconds
+    W->>S: ScheduleTaskRetry(taskID, attemptID, error, nextRunAt)
+    S->>PG: BEGIN, fail attempt<br/>Set task pending and next_run_at, COMMIT
+    S-->>W: nil
+    W-->>Q: nil
+    Q->>Q: XACK current message
+    Note over P,PG: Future publisher poll after next_run_at
+    P->>S: EnqueueDueTaskRetries(ctx, 20)
+    S->>PG: BEGIN, SELECT due pending tasks<br/>FOR UPDATE SKIP LOCKED
+    S->>PG: INSERT retry outbox events<br/>Clear next_run_at, COMMIT
+    S-->>P: Number of retries enqueued
+    P->>S: ListPendingOutbox(ctx, 20)
+    P->>Q: DispatchTask(message)
+    Note over Q,W: Ordinary consumption creates a new attempt
+```
+
+The execution stays `running` during retry waits. A scheduling or enqueue transaction failure leaves the previous durable state intact. The scheduled delay controls new retry dispatch, but `StartTaskAttempt` does not check `next_run_at`; an older duplicate delivery can start the pending task before that time.
+
+Source: [worker retry policy](../internal/orchestrator/worker.go), [publisher scheduling](../internal/outbox/publisher.go), and [retry integration test](../internal/db/store_integration_test.go).
