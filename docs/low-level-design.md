@@ -511,3 +511,16 @@ sequenceDiagram
 These are separate queries, not one repeatable-read transaction. Concurrent worker updates can therefore produce a response containing observations from different moments; later polls refresh it.
 
 Source: [dashboard polling](../apps/web/src/App.tsx), [snapshot route](../internal/httpapi/router.go), and [snapshot queries](../internal/db/store.go).
+
+## Pattern names used here
+
+| Pattern or technique | Concrete use |
+| --- | --- |
+| Repository-style store | `db.Store` hides SQL and exposes transaction-level operations. Worker and handler interfaces allow test doubles. |
+| Strategy | A common `Handler` interface with implementations selected by `Registry.Get`. |
+| Dependency injection | Constructors receive the store, registry, logger, and queue dependencies from `main`. |
+| Adapter | `RedisStreams` wraps publishing, consumer groups, decoding, reclaim, and ACKs. |
+| Transactional outbox | Database changes and dispatch intent commit together; publication is retried separately. |
+| Explicit state machine | Status values and store methods implement transitions; there are no separate GoF State objects. |
+
+`next_task` is workflow sequencing, not the Chain of Responsibility pattern. The registry is a map of existing strategies, not an Abstract Factory. These distinctions keep the LLD explanation tied to the implementation.
