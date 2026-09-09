@@ -444,3 +444,42 @@ These methods use separate database statements. A stored response can survive a 
 The sample and notification handlers produce JSON; they do not send an external notification. A real external side effect would need provider-side idempotency or another atomic boundary. Two overlapping attempts of the same task may both pass the owner check before a response is stored, so this is not an exclusive execution lock.
 
 Source: [idempotency store](../internal/db/idempotency.go), [handler](../internal/handlers/notification_handler.go), [ownership/cache integration test](../internal/db/store_integration_test.go), and [handler failure tests](../internal/handlers/notification_handler_test.go).
+
+## Worker recovery
+
+The consumer tries `XAUTOCLAIM` before reading fresh messages. When a worker disappears, another consumer can claim its pending messages after the configured idle threshold.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant R as Redis
+    participant A as Consumer A and Worker A
+    participant S as Store
+    participant B as Consumer B and Worker B
+    A->>R: XREADGROUP
+    R-->>A: Message assigned to A, pending until ACK
+    A->>S: StartTaskAttempt(taskID)
+    S-->>A: Commit attempt 1 and task running
+    Note over A,S: Worker A crashes before persisting an outcome
+    Note over R,B: Pending entry reaches ReclaimMinIdle
+    B->>R: XAUTOCLAIM to consumer B
+    R-->>B: Reclaimed message
+    B->>S: Load task, execution, and definition
+    B->>S: StartTaskAttempt(taskID)
+    alt Task remains running
+        S-->>B: Commit another running attempt and increment attempts_total
+        B->>B: Run registered handler, including idempotency check
+        B->>S: Persist success, retry, or terminal failure
+        S-->>B: Commit succeeds
+        B->>R: XACK
+    else Task already succeeded or dead_lettered
+        S-->>B: alreadyCompleted=true
+        B->>R: XACK without running handler
+    end
+```
+
+The recovery fix allows `running` tasks to start another attempt instead of being skipped and acknowledged. The earlier attempt remains `running` in history. Database errors leave the message pending.
+
+The idle threshold is not a heartbeat or task lease: a slow live worker can also have its message reclaimed. Row locks protect individual state-change transactions, but are released before handler execution. There is no attempt fencing to prevent an older worker from writing an outcome later. The current reclaim call also restarts at `0-0` and discards the returned scan cursor.
+
+Source: [reclaim and ACK code](../internal/queue/redis_streams.go), [attempt creation](../internal/db/store.go), [running-task regression test](../internal/db/store_integration_test.go), and [Redis reclaim test](../internal/queue/redis_streams_integration_test.go). These tests cover attempt recreation and message reclaim separately; they are not proof of exclusive execution during overlapping recovery.
