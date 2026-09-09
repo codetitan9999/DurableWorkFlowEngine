@@ -347,3 +347,45 @@ sequenceDiagram
 The execution stays `running` during retry waits. A scheduling or enqueue transaction failure leaves the previous durable state intact. The scheduled delay controls new retry dispatch, but `StartTaskAttempt` does not check `next_run_at`; an older duplicate delivery can start the pending task before that time.
 
 Source: [worker retry policy](../internal/orchestrator/worker.go), [publisher scheduling](../internal/outbox/publisher.go), and [retry integration test](../internal/db/store_integration_test.go).
+
+## Dead-letter and replay
+
+A missing handler dead-letters immediately. A registered handler's error dead-letters when its attempts are exhausted. Dead letters are task rows in Postgres; there is no separate Redis dead-letter stream.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant W as Worker
+    participant S as Store
+    participant Q as RedisStreams
+    actor O as Operator
+    participant API as Router and Service
+    participant P as Publisher
+    W->>S: FailTaskAttempt(taskID, attemptID, error)
+    Note over W,S: One transaction: attempt failed, task dead_lettered, execution failed
+    S-->>W: Commit succeeded
+    W-->>Q: nil
+    Q->>Q: XACK current message
+    O->>API: GET /api/dead-lettered-tasks
+    API->>S: ListDeadLetteredTasks(limit)
+    S-->>O: Failed tasks through API
+    O->>API: POST /api/tasks/{id}/replay
+    API->>S: ReplayDeadLetteredTask(taskID)
+    Note over API,S: BEGIN, SELECT task FOR UPDATE
+    alt Task is dead_lettered
+        Note over API,S: Reset task to pending<br/>Clear task error, output, retry/completion time
+        Note over API,S: Execution running, clear execution error/completion time<br/>Insert outbox, COMMIT
+        S-->>API: Updated task
+        API-->>O: 202 Accepted
+        P->>S: ListPendingOutbox
+        P->>Q: DispatchTask for the same task ID
+        Note over Q,W: Normal worker path runs again
+    else Task exists but is not dead_lettered
+        S-->>API: Not replayable, transaction rolled back
+        API-->>O: 400 Bad Request
+    end
+```
+
+Replay retains task input, handler key, idempotency key, existing attempts, and `attempts_total`. It does not clear idempotency records or grant a fresh retry budget; the next attempt number continues from the previous total. Repeating a replay request while the task is pending is rejected. A missing task returns 404.
+
+Source: [replay route](../internal/httpapi/router.go), [replay transaction](../internal/db/store.go), and [dead-letter/replay tests](../internal/db/store_integration_test.go).
