@@ -6,7 +6,7 @@ DurableFlow is a small workflow engine for multi-step background jobs, built in 
 
 **The one-minute insight:** Postgres decides what should happen; Redis delivers opportunities to do the work. Because delivery is at least once, workers re-check durable state and handlers protect side effects with persisted idempotency records.
 
-[Architecture](ARCHITECTURE.md) · [API walkthrough](docs/postman/README.md) · [Benchmarks](docs/benchmarks.md) · [Operations](docs/operations.md) · [Changelog](CHANGELOG.md)
+[Architecture](ARCHITECTURE.md) · [LLD diagrams](docs/low-level-design.md) · [API walkthrough](docs/postman/README.md) · [Benchmarks](docs/benchmarks.md) · [Operations](docs/operations.md) · [Changelog](CHANGELOG.md)
 
 ## Why durable workflows are hard
 
@@ -43,7 +43,7 @@ A workflow run follows one durable loop:
 4. Success creates the next task or completes the execution. Failure persists a future `next_run_at` or dead-letters the task.
 5. A crashed worker's pending message can be reclaimed with `XAUTOCLAIM`; replay resets eligible state and re-enters through the outbox.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for lifecycle diagrams, data-model details, and code entry points.
+See the [class diagram](ARCHITECTURE.md#class-diagram), [ER diagram](ARCHITECTURE.md#entity-relationship-view), and [LLD sequence diagrams](docs/low-level-design.md) for interfaces, transactions, and execution paths.
 
 ## What is implemented
 
@@ -103,6 +103,7 @@ DurableFlow intentionally favors a clear durability model over broad workflow sy
 ## Go deeper
 
 - [Architecture](ARCHITECTURE.md): invariants, components, data model, lifecycle, and code map
+- [Low-level design](docs/low-level-design.md): class relationships, dependency injection, and feature sequences
 - [Happy path](docs/happy-path.md): shortest source-guided execution trace
 - [Benchmarks](docs/benchmarks.md): methodology, full results, rerun commands, and caveats
 - [Operations](docs/operations.md): health checks, metrics, alerts, and incident guidance

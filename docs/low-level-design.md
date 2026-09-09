@@ -2,6 +2,26 @@
 
 The diagrams below follow the current Go code. Boxes represent structs and interfaces; sequence arrows name the methods that coordinate each feature. Transaction notes identify which writes commit together.
 
+## Diagram index
+
+| View | What it explains |
+| --- | --- |
+| [Component class diagram](../ARCHITECTURE.md#class-diagram) | Router, service, worker, store, publisher, queue, and registry |
+| [Domain classes](#domain-classes) | Definition, execution, task, attempt, and response models |
+| [Dispatch models](#dispatch-models) | Outbox payload and Redis message types |
+| [Handler strategy](#handler-strategy-and-persistence-contract) | Handler implementations and the idempotency interface |
+| [Dependency injection](#dependency-injection) | How each executable constructs its collaborators |
+| [ER diagram](../ARCHITECTURE.md#entity-relationship-view) | Persistence keys and relationships |
+| [Execution creation](#execution-creation) | API validation and the initial transaction |
+| [Outbox dispatch](#outbox-dispatch) | Publication, failure, and the duplicate window |
+| [Execution and chaining](#execution-and-chaining) | Handler selection, completion, next task, and ACK |
+| [Retries](#retries) | Fixed delay, durable scheduling, and redispatch |
+| [Dead-letter and replay](#dead-letter-and-replay) | Terminal persistence and operator recovery |
+| [Idempotency](#idempotency) | Reservation, cached response, ownership conflict, and release |
+| [Worker recovery](#worker-recovery) | Pending messages, reclaim, and running-task redelivery |
+| [Snapshot reads](#snapshot-reads) | How the dashboard receives execution and attempt history |
+| [Task lifecycle](../ARCHITECTURE.md#task-lifecycle) | State transitions and retry/replay entry points |
+
 ## Domain classes
 
 A definition describes reusable steps. An execution is one run of that definition; a task instance is one step in that run, and attempts record individual tries. Fields below are selected from [domain/models.go](../internal/domain/models.go); timestamps and error fields are omitted for space.

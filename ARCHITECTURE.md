@@ -2,6 +2,14 @@
 
 DurableFlow is a small workflow engine built around one idea: keep execution truth in Postgres, use Redis Streams only for delivery, and assume duplicate delivery can happen.
 
+## Diagram index
+
+- [System view](#system-view): services and infrastructure
+- [Class diagram](#class-diagram): Go structs, interfaces, and collaborators
+- [Entity relationship view](#entity-relationship-view): tables, keys, and relationships
+- [Main flow](#main-flow) and [task lifecycle](#task-lifecycle)
+- [Low-level design](docs/low-level-design.md): domain and handler class diagrams, construction, and sequences for dispatch, chaining, retries, replay, idempotency, recovery, and snapshot reads
+
 ## Goal
 
 The system is meant to handle the failure cases that usually make background work messy:
