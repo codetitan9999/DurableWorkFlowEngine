@@ -140,6 +140,80 @@ Owns workflow semantics:
 - dead-letter decisions
 - next-task chaining
 
+## Class diagram
+
+These boxes represent Go structs and interfaces. Method lists show the main responsibilities; interface satisfaction is implicit in Go. `Store` owns SQL and transactions, while `Worker` chooses the execution outcome.
+
+```mermaid
+classDiagram
+    direction TB
+    class Router {
+        -handleExecutions()
+        -handleExecutionSnapshot()
+        -handleTaskActions()
+    }
+    class Service {
+        +CreateWorkflowDefinition()
+        +TriggerExecution()
+        +GetExecutionSnapshot()
+        +GetDeadLetteredTasks()
+        +ReplayDeadLetteredTask()
+    }
+    class Worker {
+        +GetWorkflowSpecAndTaskSpecByTaskID()
+        +HandleDispatchedTask()
+    }
+    class workerStore {
+        <<interface>>
+        +GetTaskInstance()
+        +StartTaskAttempt()
+        +ScheduleTaskRetry()
+        +FailTaskAttempt()
+        +CompleteTaskAttempt()
+        +CompleteTaskAttemptAndEnqueueNextTask()
+    }
+    class Store {
+        +CreateExecutionAndTask()
+        +GetExecutionSnapshot()
+        +ReplayDeadLetteredTask()
+        +EnqueueDueTaskRetries()
+        +ListPendingOutbox()
+        +MarkOutboxDispatched()
+        +RecordOutboxFailure()
+    }
+    class Publisher {
+        +Run()
+        -publishOnce()
+    }
+    class RedisStreams {
+        +DispatchTask()
+        +Consume()
+        +EnsureGroup()
+        -claimPending()
+        -processMessages()
+    }
+    class Registry {
+        +Get(key)
+    }
+    class Handler {
+        <<interface>>
+        +Key() string
+        +Handle(ctx, task)
+    }
+    Router --> Service : service
+    Service --> Store : store
+    Worker --> workerStore : store
+    Store ..|> workerStore : satisfies
+    Worker --> Registry : registry
+    Registry o--> Handler : indexed by key
+    Worker ..> Handler : calls Handle
+    Publisher --> Store : store
+    Publisher --> RedisStreams : streams
+    RedisStreams ..> Worker : invokes injected callback
+```
+
+`Service` and `Publisher` take a concrete `*db.Store`; `Worker` takes the smaller `workerStore` interface. `RedisStreams` receives a function callback, not a worker object. The [handler class diagram](docs/low-level-design.md#handler-strategy-and-persistence-contract) and [construction diagram](docs/low-level-design.md#dependency-injection) show the remaining wiring.
+
 ## Data model
 
 ### Core tables
