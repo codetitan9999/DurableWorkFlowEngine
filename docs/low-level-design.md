@@ -180,3 +180,43 @@ flowchart TB
 This is manual constructor injection. Worker tests substitute `workerStore`; handler tests substitute `idempotencyStore`. The service and publisher still depend on concrete store types. The consumer handles messages sequentially within one process; more worker processes provide parallel execution.
 
 Source: [API startup](../apps/api/main.go), [worker startup](../apps/worker/main.go), [worker test doubles](../internal/orchestrator/worker_test.go), and [handler test doubles](../internal/handlers/sample_handler_test.go).
+
+## Execution creation
+
+Workflow creation validates and stores the JSON definition first. Triggering an execution loads that definition, resolves the entry task, and commits the initial task and dispatch intent together.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client
+    participant Router
+    participant Service
+    participant Store
+    participant PG as PostgreSQL
+    Client->>Router: POST /api/executions
+    Router->>Service: TriggerExecution(request)
+    Service->>Store: GetWorkflowDefinition(definitionID)
+    Store->>PG: SELECT definition
+    PG-->>Service: DefinitionJSON (through Store)
+    Service->>Service: ParseAndValidateWorkflowDefinition<br/>FindEntryTask
+    Service->>Store: CreateExecutionAndTask(definitionID, input, name, handlerKey)
+    Store->>PG: BEGIN
+    Store->>PG: INSERT execution (running)
+    Store->>PG: INSERT entry task (pending, idempotency key)
+    Store->>PG: INSERT outbox event (task.dispatch)
+    alt All writes succeed
+        Store->>PG: COMMIT
+        Store-->>Service: ExecutionStartResult
+        Service-->>Router: Execution and entry task
+        Router-->>Client: 202 Accepted
+    else A write fails
+        Store->>PG: ROLLBACK
+        Store-->>Service: Error, no partial execution created
+        Service-->>Router: Error
+        Router-->>Client: Error response
+    end
+```
+
+The API response confirms creation, not task completion. An API crash after commit leaves the outbox row available to the publisher. Client retries of the trigger request are not deduplicated by the task's idempotency key; they can create another execution.
+
+Source: [router](../internal/httpapi/router.go), [service](../internal/orchestrator/service.go), and `CreateExecutionAndTask` in [store.go](../internal/db/store.go).
