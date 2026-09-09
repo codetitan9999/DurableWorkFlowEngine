@@ -167,9 +167,74 @@ erDiagram
     WORKFLOW_DEFINITIONS ||--o{ WORKFLOW_EXECUTIONS : "used by"
     WORKFLOW_EXECUTIONS ||--o{ TASK_INSTANCES : "contains"
     TASK_INSTANCES ||--o{ TASK_ATTEMPTS : "has"
-    TASK_INSTANCES ||--o{ OUTBOX_EVENTS : "dispatches"
-    TASK_INSTANCES ||--o| IDEMPOTENCY_RECORDS : "owns"
+    TASK_INSTANCES ||..o{ OUTBOX_EVENTS : "logical dispatch reference"
+    TASK_INSTANCES |o--o{ IDEMPOTENCY_RECORDS : "owns"
+
+    WORKFLOW_DEFINITIONS {
+        uuid id PK
+        text name UK
+        int version
+        text status
+        jsonb definition_json
+    }
+    WORKFLOW_EXECUTIONS {
+        uuid id PK
+        uuid workflow_definition_id FK
+        text status
+        jsonb input_json
+        jsonb output_json
+        text error_text
+        timestamptz started_at
+        timestamptz completed_at
+    }
+    TASK_INSTANCES {
+        uuid id PK
+        uuid workflow_execution_id FK
+        text task_name
+        text handler_key
+        text status
+        text idempotency_key UK
+        int attempts_total
+        jsonb input_json
+        jsonb output_json
+        timestamptz next_run_at
+        timestamptz dispatched_at
+        timestamptz completed_at
+        text last_error_text
+    }
+    TASK_ATTEMPTS {
+        uuid id PK
+        uuid task_instance_id FK
+        int attempt_number
+        text status
+        jsonb output_json
+        text error_text
+        timestamptz started_at
+        timestamptz finished_at
+    }
+    OUTBOX_EVENTS {
+        uuid id PK
+        text aggregate_type
+        uuid aggregate_id
+        text event_type
+        jsonb payload_json
+        timestamptz available_at
+        timestamptz dispatched_at
+        int attempt_count
+        text last_error_text
+    }
+    IDEMPOTENCY_RECORDS {
+        text handler_key PK
+        text idempotency_key PK
+        uuid owner_task_instance_id FK
+        text status
+        jsonb response_json
+    }
 ```
+
+Routine creation/update timestamps are omitted. The outbox's `aggregate_id` is a logical task reference with no foreign-key constraint. An idempotency record has a composite primary key `(handler_key, idempotency_key)` and a nullable owner FK; the schema allows multiple records per task. The built-in handlers normally use one record per task. A definition has a `version` column, but no version-management API.
+
+Source: [schema](migrations/001_init.sql), [idempotency key](migrations/002_idempotency_records.sql), and [ownership migration](migrations/003_idempotency_record_ownership.sql).
 
 ## Code map
 
