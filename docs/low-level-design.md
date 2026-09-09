@@ -161,3 +161,22 @@ flowchart TB
     AQ["NewRedisStreams(...)"] --> PU
     PU --> LOOP["Publisher.Run goroutine"]
 ```
+
+### Worker process
+
+```mermaid
+flowchart TB
+    WP["Postgres pool"] --> WS["db.NewStore(pool)"]
+    WS --> EH["NewSampleEchoHandler(logger, store)"]
+    WS --> NH["NewNotificationSendHandler(logger, store)"]
+    EH --> RG["NewRegistry(echo, notification)"]
+    NH --> RG
+    WS --> WK["NewWorker(store, registry, logger)"]
+    RG --> WK
+    WQ["NewRedisStreams(...)"] --> C["streams.Consume<br/>(ctx, opts, worker.HandleDispatchedTask)"]
+    WK -->|method callback| C
+```
+
+This is manual constructor injection. Worker tests substitute `workerStore`; handler tests substitute `idempotencyStore`. The service and publisher still depend on concrete store types. The consumer handles messages sequentially within one process; more worker processes provide parallel execution.
+
+Source: [API startup](../apps/api/main.go), [worker startup](../apps/worker/main.go), [worker test doubles](../internal/orchestrator/worker_test.go), and [handler test doubles](../internal/handlers/sample_handler_test.go).
