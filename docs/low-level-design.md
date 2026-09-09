@@ -66,3 +66,36 @@ classDiagram
 ```
 
 The ID arrows represent references, not in-memory parent objects. `NextRunAt` is nullable in Go. `NextTask` names another step in the same definition, and that step receives the preceding handler's output as input. The persisted task key is `executionID:taskName`; replay preserves it.
+
+## Dispatch models
+
+The publisher decodes an outbox payload into `domain.DispatchTaskPayload`, then copies its identifiers into `queue.TaskMessage`. The worker loads the task's input and state from Postgres.
+
+```mermaid
+classDiagram
+    direction TB
+    class OutboxEvent {
+        +string ID
+        +string AggregateType
+        +string AggregateID
+        +string EventType
+        +RawMessage PayloadJSON
+        +Time AvailableAt
+        +Time DispatchedAt
+        +int AttemptCount
+    }
+    class DispatchTaskPayload {
+        +string TaskID
+        +string ExecutionID
+        +string HandlerKey
+    }
+    class TaskMessage {
+        +string TaskID
+        +string ExecutionID
+        +string HandlerKey
+    }
+    OutboxEvent ..> DispatchTaskPayload : PayloadJSON decodes into
+    DispatchTaskPayload ..> TaskMessage : Publisher maps identifiers
+```
+
+`DispatchedAt` is nullable. `AggregateID` refers to the task; Redis serializes `TaskMessage` as JSON in the stream entry's `payload` field. Source: [domain models](../internal/domain/models.go), [publisher](../internal/outbox/publisher.go), and [queue models](../internal/queue/redis_streams.go).
