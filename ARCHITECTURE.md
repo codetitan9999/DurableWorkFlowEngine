@@ -403,8 +403,10 @@ Task state alone is not enough to protect side effects.
 
 - reserve a durable idempotency key
 - store a successful response
-- let the same task instance resume safely
-- block a different task instance from repeating the same side effect
+- let the same task instance continue an unfinished reservation
+- reject a different task instance while a reservation is in progress
+
+The built-in handlers generate JSON responses; they do not call an external notification provider. Same-task ownership is not an execution lease. The [idempotency sequence](docs/low-level-design.md#idempotency) shows the cached-response and conflict paths, including these boundaries.
 
 ## Task lifecycle
 

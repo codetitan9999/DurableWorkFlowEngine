@@ -389,3 +389,58 @@ sequenceDiagram
 Replay retains task input, handler key, idempotency key, existing attempts, and `attempts_total`. It does not clear idempotency records or grant a fresh retry budget; the next attempt number continues from the previous total. Repeating a replay request while the task is pending is rejected. A missing task returns 404.
 
 Source: [replay route](../internal/httpapi/router.go), [replay transaction](../internal/db/store.go), and [dead-letter/replay tests](../internal/db/store_integration_test.go).
+
+## Idempotency
+
+Both built-in handlers call `BeginIdempotentTask` before building their response. The unique key is `(handler_key, idempotency_key)`; ownership is the task instance ID, not the attempt or worker ID.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant W as Worker
+    participant H as Handler
+    participant S as Store
+    participant PG as PostgreSQL
+    W->>H: Handle(ctx, task)
+    H->>S: BeginIdempotentTask(handlerKey, key, task.ID)
+    S->>PG: INSERT in_progress reservation ON CONFLICT DO NOTHING
+    alt Reservation inserted
+        S-->>H: replayed=false, nil
+    else Key already exists
+        S->>PG: SELECT status, response_json, owner_task_instance_id
+        alt Completed
+            S-->>H: Cached response, replayed=true
+            H-->>W: Return cached response
+        else In progress, same task owner
+            S-->>H: replayed=false, nil
+        else In progress, another owner or no owner
+            S-->>H: Idempotency key in progress error
+            H-->>W: Error handled by normal retry policy
+        end
+    end
+    opt Begin allowed execution
+        H->>H: Parse input and build demo response
+        alt Response built
+            H->>S: CompleteIdempotentTask(..., task.ID, response)
+            S->>PG: UPDATE matching key and owner to completed with response
+            alt Completion succeeds
+                S-->>H: nil
+                H-->>W: Response
+            else Completion fails
+                S-->>H: Error
+                H->>S: ReleaseIdempotentTask(..., task.ID)
+                H-->>W: Error
+            end
+        else Parsing or response creation fails
+            H->>S: ReleaseIdempotentTask(..., task.ID)
+            S->>PG: DELETE matching in_progress reservation and owner
+            H-->>W: Error
+        end
+    end
+```
+
+These methods use separate database statements. A stored response can survive a later task-completion failure and be reused on another attempt. Reservation release is best effort and only deletes a matching in-progress row.
+
+The sample and notification handlers produce JSON; they do not send an external notification. A real external side effect would need provider-side idempotency or another atomic boundary. Two overlapping attempts of the same task may both pass the owner check before a response is stored, so this is not an exclusive execution lock.
+
+Source: [idempotency store](../internal/db/idempotency.go), [handler](../internal/handlers/notification_handler.go), [ownership/cache integration test](../internal/db/store_integration_test.go), and [handler failure tests](../internal/handlers/notification_handler_test.go).
