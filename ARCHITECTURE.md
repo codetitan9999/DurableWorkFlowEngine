@@ -99,7 +99,7 @@ Keeps the system easy to inspect:
 
 Reference screenshots:
 
-- [Overview](docs/screenshots/01-overview.jpeg)
+- [Overview](docs/screenshots/01-overview.png)
 - [Successful execution](docs/screenshots/02-successful-execution.jpeg)
 - [Dead-letter handling](docs/screenshots/03-dead-letter-panel.jpeg)
 - [Replay flow](docs/screenshots/04-replay-response.jpeg)
