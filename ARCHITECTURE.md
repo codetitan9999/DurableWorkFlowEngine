@@ -338,12 +338,15 @@ Task state alone is not enough to protect side effects.
 stateDiagram-v2
     [*] --> pending
     pending --> running: worker starts attempt
+    running --> running: redelivery starts another attempt
     running --> succeeded: handler succeeds
     running --> pending: retry scheduled
-    running --> dead_lettered: retries exhausted
+    running --> dead_lettered: missing handler or attempts exhausted
     dead_lettered --> pending: manual replay
     succeeded --> [*]
 ```
+
+Retry waiting is `pending` with `next_run_at` set. `TaskStatusFailed` is declared in Go but is not written by the current worker paths. Attempt rows use `running`, `succeeded`, and `failed`; an abandoned attempt is not automatically closed when a new one starts.
 
 ## Current scope
 
